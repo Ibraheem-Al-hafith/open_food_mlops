@@ -76,54 +76,89 @@ open_food_mlops/
 │   └── workflows/
 │       ├── ci.yml                 # Code quality, unit testing & artifact checks
 │       └── cd.yml                 # Deployment execution to VPS
+│
 ├── docker/
 │   ├──Dockerfile.api             # Container definition for FastAPI serving
 │   ├── Dockerfile.mlflow          # Container definition for MLflow server
 │   ├── Dockerfile.pipeline        # Container definition for Prefect tasks/flows
-│   └── nginx.conf                 # NGINX reverse proxy configuration
-├── docker-compose.yml             # Local & VPS orchestration manifest
-├── dvc.yaml                       # Data pipeline stage definitions
-├── dvc.lock                       # DVC state tracking file
-├── pyproject.toml                 # Dependencies (uv managed)
-├── README.md
+│   ├── nginx.conf                 # NGINX reverse proxy configuration
+│   └── mlflow/
+│       └── entrypoint.sh
 ├── config/
 │   ├── config.yaml                # Main operational parameters
 │   └── logging.yaml               # Structured logging definitions
-├── data/                          # DVC tracked directory
+│
+├── data/                         # DVC tracked directory
 │   ├── raw/
 │   ├── processed/
+│   ├── features/
 │   └── predictions/
+│
 ├── models/                        # Local registry artifacts cache
+│
 ├── notebooks/
 │   └── 01_exploratory_poc.ipynb
-├── pipelines/                     # Prefect Workflows
-│   ├── data_ingestion_flow.py
+│
+├── pipelines/                    # Prefect Workflows
+│   ├── ingestion_flow.py
 │   ├── training_flow.py
-│   └── batch_inference_flow.py
+│   ├── batch_inference_flow.py
+│   └── monitoring_flow.py
+│
 ├── src/
 │   └── open_food_mlops/
 │       ├── __init__.py
 │       ├── config/
 │       │   ├── schema.py          # Pydantic data validation schemas
 │       │   └── settings.py        # Environment variables & paths
-│       ├── domain/                # Business & Core ML Logic
-│       │   ├── preprocessor.py    # Text & tabular feature transformation
-│       │   ├── trainer.py         # Model training & hyperparameter tuning
-│       │   └── evaluator.py       # Metrics calculation (F1, Accuracy per class)
-│       ├── infrastructure/        # External Adaptors & Integrations
-│       │   ├── data_loader.py     # Data retrieval (Open Food Facts API/Dumps)
-│       │   ├── mlflow_client.py   # Logging metrics, parameters, and models
-│       │   └── storage.py         # Local IO and artifact management
-│       └── utils/
-│           ├── logger.py          # Centralized logger factory
+│       │
+│       ├── data/                  # Data retrieval (Open Food Facts API/Dumps)
+│       │   ├── ingestion.py
+│       │   ├── validation.py
+│       │   ├── cleaning.py
+│       │   └── splitting.py
+│       │
+│       ├── features/             # Text & tabular feature transformation
+│       │   ├── text.py
+│       │   ├── nutrition.py
+│       │   ├── ingredients.py
+│       │   └── builder.py
+│       │
+│       ├── models/
+│       │   ├── trainer.py
+│       │   ├── predictor.py
+│       │   ├── evaluator.py
+│       │   └── calibration.py
+│       │
+│       ├── inference/
+│       │   ├── service.py
+│       │   └── decision.py
+│       │
+│       ├── infrastructure/
+│       │   ├── off_client.py
+│       │   ├── mlflow_client.py
+│       │   ├── storage.py
+│       │   └── repositories.py
+│       │
+│       └── observability/
+│           ├── logging.py
 │           └── metrics.py
+│
 ├── serving/                       # Real-Time Inference Application
 │   ├── app.py                     # FastAPI entrypoint
 │   └── schemas.py                 # Request/Response DTOs
-└── tests/
-    ├── unit/                      # Fast domain component test suite
-    ├── integration/               # Pipeline and storage tests
-    └── end_to_end/                # API contract tests
+│
+├── tests/
+│   ├── unit/                      # Fast domain component test suite
+│   ├── integration/               # Pipeline and storage tests
+│   └── end_to_end/                # API contract tests
+│
+├── docker-compose.yml             # Local & VPS orchestration manifest
+├── dvc.yaml                       # Data pipeline stage definitions
+├── dvc.lock                       # DVC state tracking file
+├── pyproject.toml                 # Dependencies (uv managed)
+├── README.md
+└── .env.example
 ```
 
 ---
