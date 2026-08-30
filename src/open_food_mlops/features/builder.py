@@ -16,6 +16,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from .base import FeaturePipeline
+from .identity import IdentityTransformer
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -46,6 +47,11 @@ def get_feature_pipeline() -> FeaturePipeline:
     #         IngredientFeatureTransformer(...),
     #     ]
     # )
+    transformers.extend(
+        [
+            IdentityTransformer(),
+        ]
+    )
 
     if not transformers:
         raise RuntimeError(

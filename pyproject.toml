@@ -9,10 +9,17 @@ dependencies = [
     "lightgbm>=4.7.0",
     "matplotlib>=3.11.1",
     "numpy>=2.5.1",
+    "optuna>=4.9.0",
     "pandas>=3.0.5",
     "pyarrow>=25.0.1",
+    "pydantic>=2.13.5",
+    "pytest>=9.1.1",
     "pyyaml>=6.0.3",
     "requests>=2.34.2",
     "scikit-learn>=1.9.0",
     "xgboost>=3.4.0",
 ]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

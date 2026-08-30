@@ -133,7 +133,6 @@ class XGBoostModel(BaseModel):
         """Serialize the fitted XGBoost estimator and configuration."""
         metadata = {
             "config": self.config,
-            "classes": getattr(self.estimator_, "classes_", None),
         }
         joblib.dump(metadata, path / "metadata.joblib")
         assert self.estimator_ is not None
@@ -148,8 +147,6 @@ class XGBoostModel(BaseModel):
 
         estimator = xgb.XGBClassifier()
         estimator.load_model(path / "model.json")
-        if metadata.get("classes") is not None:
-            estimator.classes_ = metadata["classes"]
 
         model.estimator_ = estimator
         model.is_fitted_ = True
