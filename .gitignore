@@ -217,6 +217,18 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# Data
-data/
+# 1. Ignore ONLY the root data folder (datasets, parquet, csv)
+/data/
+
+# 2. Ignore data artifacts globally, but keep Python (.py) files
+*.parquet
+*.csv
+*.csv.gz
+*.pkl
+*.joblib
+*.log
+
+# 3. Standard Python/ML ignores
+__pycache__/
+*.pyc
 mlruns/
