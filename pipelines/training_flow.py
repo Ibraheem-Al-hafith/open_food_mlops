@@ -2,9 +2,9 @@
 
 import argparse
 import yaml
-from src.open_food_mlops.config.schemas import ExperimentPlan
-from src.open_food_mlops.experiments.orchestrator import ExperimentOrchestrator
-from src.open_food_mlops.utils.logger import setup_logging
+from open_food_mlops.config.schemas import ExperimentPlan
+from open_food_mlops.experiments.orchestrator import ExperimentOrchestrator
+from open_food_mlops.utils.logger import setup_logging
 
 
 def run_pipeline(config_path: str) -> None:

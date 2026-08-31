@@ -1,0 +1,44 @@
+name: "colab_food_experiment"
+seed: 42
+
+data:
+  provider: "tabular"
+  data_path: "data/food_data.csv"
+  target_column: "target"
+  n_splits: 3
+  random_state: 42
+
+features:
+  transformers: []
+
+models:
+  - name: "decision_tree"
+    enabled: true
+    params:
+      max_depth: 5
+      criterion: "gini"
+    tuning:
+      enabled: false
+
+  - name: "logistic_regression"
+    enabled: true
+    params:
+      max_iter: 200
+      C: 1.0
+    tuning:
+      enabled: true
+      method: "optuna"
+      trials: 5
+      direction: "maximize"
+      random_state: 42
+
+selection:
+  primary_metric: "macro_f1"
+  direction: "maximize"
+  gates:
+    accuracy: 0.50
+
+tracking:
+  backend: "mlflow"
+  tracking_uri: "sqlite:///mlflow.db"
+  experiment_name: "open-food-mlops-colab"

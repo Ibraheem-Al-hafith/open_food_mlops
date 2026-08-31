@@ -15,6 +15,8 @@ from open_food_mlops.experiments.selection import (
     ModelSelectionEngine,
     SelectionResult,
 )
+# Add this import to src/open_food_mlops/experiments/orchestrator.py
+import open_food_mlops.models.implementations  # Triggers model registration
 from open_food_mlops.features.builder import get_feature_pipeline
 from open_food_mlops.models.factory import create_model
 from open_food_mlops.models.registry import get_model_class
