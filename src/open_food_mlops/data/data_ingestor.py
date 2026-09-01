@@ -311,6 +311,8 @@ class OpenFoodFactsDataIngestor(BaseDataIngestor):
                 pd.DataFrame
             """
             df = df[feature_columns].dropna(subset=[self.config.target]).apply(lambda x:pd.to_numeric(x, errors="coerce"))
+            df = df[df[self.config.target].isin([1.0, 2.0, 3.0, 4.0])]
+            df[self.config.target] -= 1
             return df
 
         try:
