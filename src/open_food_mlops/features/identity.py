@@ -5,6 +5,7 @@ Classes:
         It just pass the data frame as it.
 """
 import pandas as pd
+import numpy as np
 from .base import BaseFeatureTransformer
 
 class IdentityTransformer(BaseFeatureTransformer):
@@ -28,6 +29,7 @@ class IdentityTransformer(BaseFeatureTransformer):
         """
         # Pro-tip: Use .copy() to avoid mutating the original DataFrame!
         X_out = X.copy()
-        X_out.fillna(0, inplace=True)
+        X_out = X_out.replace([np.inf, -np.inf], np.nan)
+        X_out = X_out.fillna(0)
         
         return X_out

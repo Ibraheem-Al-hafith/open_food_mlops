@@ -232,3 +232,12 @@ __marimo__/
 __pycache__/
 *.pyc
 mlruns/
+# MLflow local SQLite database
+mlflow.db
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Ignoring logs
+logs/

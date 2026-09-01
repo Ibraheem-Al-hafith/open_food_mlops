@@ -3,9 +3,9 @@ seed: 42
 
 data:
   provider: "tabular"
-  data_path: "data/food_data.csv"
-  target_column: "target"
-  n_splits: 3
+  data_path: "data/processed/processed_data.parquet"
+  target_column: "nova_group"
+  n_splits: 5
   random_state: 42
 
 features:
@@ -26,7 +26,7 @@ models:
       max_iter: 200
       C: 1.0
     tuning:
-      enabled: true
+      enabled: false
       method: "optuna"
       trials: 5
       direction: "maximize"
@@ -41,4 +41,4 @@ selection:
 tracking:
   backend: "mlflow"
   tracking_uri: "sqlite:///mlflow.db"
-  experiment_name: "open-food-mlops-colab"
+  experiment_name: "pipeline_correctness_checking"
