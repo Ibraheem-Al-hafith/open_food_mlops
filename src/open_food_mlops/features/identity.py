@@ -28,5 +28,6 @@ class IdentityTransformer(BaseFeatureTransformer):
         """
         # Pro-tip: Use .copy() to avoid mutating the original DataFrame!
         X_out = X.copy()
+        X_out.fillna(0, inplace=True)
         
         return X_out
