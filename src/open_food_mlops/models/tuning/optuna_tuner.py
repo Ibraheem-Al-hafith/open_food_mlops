@@ -36,7 +36,7 @@ class OptunaTuner(BaseTuner):
         n_trials: int = 50,
         direction: str = "maximize",
         random_state: int | None = 42,
-        show_progress_bar: bool = False,
+        show_progress_bar: bool = True,
     ) -> None:
         """Initialize the Optuna hyperparameter tuner.
 

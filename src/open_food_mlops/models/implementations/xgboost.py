@@ -126,7 +126,8 @@ class XGBoostModel(BaseModel):
             "colsample_bytree": FloatParameter(low=0.5, high=1.0),
             "min_child_weight": IntParameter(low=1, high=10),
             "gamma": FloatParameter(low=0.0, high=5.0),
-            "booster": CategoricalParameter(choices=("gbtree", "dart")),
+            #"booster": CategoricalParameter(choices=("gbtree", "dart")),
+            "rate_drop": FloatParameter(low=0.0, high=1.0),
         }
 
     def _save(self, path: Path) -> None:
