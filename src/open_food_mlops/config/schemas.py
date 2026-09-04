@@ -2,25 +2,23 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any, Literal
-
 from pydantic import BaseModel, ConfigDict, Field
-
-logger = logging.getLogger(__name__)
-
-logger.debug("Loaded configuration schemas for the pipeline.")
 
 
 class DataConfig(BaseModel):
-    """Configuration for data providers and splitting strategy."""
+    """Configuration for dataset ingestion, sampling, and splitting."""
 
     model_config = ConfigDict(extra="forbid")
 
-    provider: str = Field(default="stratified_kfold")
     data_path: str
-    target_column: str = "target"
-    n_splits: int = Field(default=5, ge=1)
+    target_column: str = "nova_group"
+    sample_fraction: float = Field(default=1.0, gt=0.0, le=1.0)
+    test_size: float = Field(default=0.2, gt=0.0, lt=1.0)
+    n_splits: int = Field(default=5, ge=2)
+    validation_method: Literal[
+        "train_test_split", "kfold", "stratified_kfold"
+    ] = "stratified_kfold"
     random_state: int = 42
 
 
@@ -29,7 +27,7 @@ class FeatureConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    transformers: list[str] = Field(default_factory=list)
+    transformers: list[str] = Field(default_factory=lambda: ["identity"])
 
 
 class TuningConfig(BaseModel):
@@ -76,7 +74,7 @@ class TrackingConfig(BaseModel):
 
 
 class ExperimentPlan(BaseModel):
-    """Declarative specification for an end-to-end experiment execution."""
+    """Declarative specification for end-to-end pipeline execution."""
 
     model_config = ConfigDict(extra="forbid")
 

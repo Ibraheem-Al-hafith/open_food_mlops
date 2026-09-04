@@ -1,0 +1,78 @@
+name: open_food_classification_experiment
+seed: 42
+
+data:
+  data_path: data/processed/processed_data.parquet
+  target_column: nova_group
+  sample_fraction: 0.01  # Load stratified 50% fraction of the dataset
+  test_size: 0.2
+  n_splits: 5
+  validation_method: train_test_split
+  random_state: 42
+
+features:
+  transformers:
+    - identity
+
+models:
+  - name: decision_tree
+    enabled: true
+    params:
+      max_depth: 10
+      criterion: gini
+    tuning:
+      enabled: false
+      method: optuna
+      trials: 10
+      direction: maximize
+      random_state: 42
+
+  - name: random_forest
+    enabled: true
+    params:
+      n_estimators: 100
+      max_depth: 15
+    tuning:
+      enabled: false
+      trials: 5
+      direction: maximize
+      random_state: 42
+  - name: "logistic_regression"
+    enabled: false
+    params:
+      max_iter: 200
+      C: 1.0
+    tuning:
+      enabled: false
+      method: "optuna"
+      trials: 5
+      direction: "maximize"
+      random_state: 42
+  - name: "xgboost"
+    enabled: true
+    tuning:
+      enabled: true
+      method: "optuna"
+      trials: 3
+      direction: "maximize"
+      random_state: 42
+  - name: "lightgbm"
+    enabled: true
+    tuning:
+      enabled: true
+      method: "optuna"
+      trials: 3
+      direction: "maximize"
+      random_state: 42
+  
+selection:
+  primary_metric: macro_f1
+  direction: maximize
+  gates:
+    accuracy: 0.50
+    macro_f1: 0.45
+
+tracking:
+  backend: mlflow
+  tracking_uri: sqlite:///mlflow.db
+  experiment_name: open-food-mlops

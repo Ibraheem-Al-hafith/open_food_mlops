@@ -1,4 +1,4 @@
-"""Core pipeline orchestrator coordinating data, training, tuning, and tracking."""
+"""Core orchestrator managing ingestion, feature engineering, model training, and selection."""
 
 from __future__ import annotations
 
@@ -7,18 +7,23 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
 from open_food_mlops.config.schemas import ExperimentPlan
-from open_food_mlops.data.providers import TabularDataProvider
+from open_food_mlops.data.splitting import (
+    DataSplitConfig,
+    DatasetSplits,
+    TestConfig,
+    ValidationConfig,
+    ValidationMethod,
+)
 from open_food_mlops.evaluation.evaluator import Evaluator
 from open_food_mlops.experiments.selection import (
     CandidateResult,
     ModelSelectionEngine,
     SelectionResult,
 )
-# Add this import to src/open_food_mlops/experiments/orchestrator.py
-import open_food_mlops.models.implementations  # Triggers model registration
 from open_food_mlops.features.builder import get_feature_pipeline
-from open_food_mlops.models.factory import create_model
+import open_food_mlops.models.implementations  # Register models
 from open_food_mlops.models.registry import get_model_class
 from open_food_mlops.models.tuning.optuna_tuner import OptunaTuner
 from open_food_mlops.tracking.mlflow_tracker import MLflowTracker
@@ -27,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 
 class ExperimentOrchestrator:
-    """Coordinates end-to-end MLOps pipeline execution."""
+    """Coordinates end-to-end execution of MLOps pipelines."""
 
     def __init__(self, plan: ExperimentPlan) -> None:
         self.plan = plan
@@ -35,75 +40,78 @@ class ExperimentOrchestrator:
             tracking_uri=plan.tracking.tracking_uri,
             experiment_name=plan.tracking.experiment_name,
         )
-        self.evaluator = Evaluator(
-            primary_metric=plan.selection.primary_metric
-        )
+        self.evaluator = Evaluator(primary_metric=plan.selection.primary_metric)
         self.selection_engine = ModelSelectionEngine(
             primary_metric=plan.selection.primary_metric,
             direction=plan.selection.direction,
             gates=plan.selection.gates,
         )
-        self.data_config = plan.data
 
     def run(self) -> SelectionResult:
-        """Executes full experiment pipeline across all enabled models."""
-        data_provider = TabularDataProvider(
-            data_path=self.plan.data.data_path,
-            target_column=self.plan.data.target_column,
-            # config=self.data.
-            # n_splits=self.plan.data.n_splits,
-            # random_state=self.plan.data.random_state,
+        """Execute experiment flow across all enabled models."""
+        df = self._load_data(self.plan.data.data_path)
+
+        split_config = DataSplitConfig(
+            sample_fraction=self.plan.data.sample_fraction,
+            test=TestConfig(
+                test_size=self.plan.data.test_size,
+                random_state=self.plan.data.random_state,
+            ),
+            validation=ValidationConfig(
+                method=ValidationMethod(self.plan.data.validation_method),
+                n_splits=self.plan.data.n_splits,
+                random_state=self.plan.data.random_state,
+            ),
+        )
+
+        dataset = DatasetSplits.from_dataframe(
+            dataframe=df,
+            target=self.plan.data.target_column,
+            config=split_config,
         )
 
         candidates: list[CandidateResult] = []
         for model_cfg in self.plan.models:
-            try: 
-                if not model_cfg.enabled:
-                    logger.info("Skipping disabled model: %s", model_cfg.name)
-                    continue
+            if not model_cfg.enabled:
+                logger.info("Skipping disabled model: %s", model_cfg.name)
+                continue
 
-                logger.info("Starting execution for model: %s", model_cfg.name)
-                candidate = self._run_model_pipeline(model_cfg, data_provider)
+            try:
+                candidate = self._run_model_pipeline(model_cfg, dataset)
                 candidates.append(candidate)
-            except Exception as e:
-                logger.error(f"Error running model: {model_cfg.name}: {e}")
+            except Exception as err:
+                logger.error("Failed executing model %s: %s", model_cfg.name, err, exc_info=True)
 
-        selection_result = self.selection_engine.select_champion(candidates)
-        if selection_result.champion:
-            logger.info(
-                "Champion model selected: %s (ID: %s)",
-                selection_result.champion.model_name,
-                selection_result.champion.candidate_id,
-            )
-        else:
-            logger.warning("No candidate passed quality gates.")
+        return self.selection_engine.select_champion(candidates)
 
-        return selection_result
+    def _load_data(self, path: str) -> pd.DataFrame:
+        if path.endswith(".parquet"):
+            return pd.read_parquet(path)
+        return pd.read_csv(path)
 
     def _run_model_pipeline(
-        self, model_cfg: Any, data_provider: TabularDataProvider
+        self, model_cfg: Any, dataset: DatasetSplits
     ) -> CandidateResult:
         with self.tracker.start_run(run_name=f"{model_cfg.name}_run"):
             model_cls = get_model_class(model_cfg.name)
             best_params = model_cfg.params.copy()
 
-            # 1. Hyperparameter Optimization
+            # Hyperparameter Optimization
             if model_cfg.tuning.enabled:
-                logger.info("Running HPO tuning for model %s", model_cfg.name)
-
                 def objective(sampled_params: dict[str, Any]) -> float:
                     scores = []
-                    for split in data_provider.get_splits():
-                        feat_pipe = get_feature_pipeline()
-                        X_tr = feat_pipe.fit_transform(split.X_train)
-                        X_va = feat_pipe.transform(split.X_val)
+                    for split in dataset.splits:
+                        pipe = get_feature_pipeline()
+                        X_tr = pipe.fit_transform(split.X_train)
+                        X_va = pipe.transform(split.X_validation)
 
                         m = model_cls({**model_cfg.params, **sampled_params})
                         m.fit(X_tr, split.y_train)
                         preds = m.predict(X_va)
-                        score = self.evaluator.evaluate(split.y_val, preds).primary_score
-                        scores.append(score)
-                    return sum(scores) / len(scores)
+                        scores.append(
+                            self.evaluator.evaluate(split.y_validation, preds).primary_score
+                        )
+                    return float(sum(scores) / len(scores))
 
                 tuner = OptunaTuner(
                     model_class=model_cls,
@@ -112,33 +120,29 @@ class ExperimentOrchestrator:
                     direction=model_cfg.tuning.direction,
                     random_state=model_cfg.tuning.random_state,
                 )
-                tuning_res = tuner.optimize(objective)
-                best_params.update(tuning_res.best_params)
+                best_params.update(tuner.optimize(objective).best_params)
 
-            # 2. Final Training & Cross Validation Evaluation
+            # Cross Validation
             fold_metrics: list[dict[str, float]] = []
-            for split in data_provider.get_splits():
-                feat_pipe = get_feature_pipeline()
-                X_tr = feat_pipe.fit_transform(split.X_train)
-                X_va = feat_pipe.transform(split.X_val)
+            for split in dataset.splits:
+                pipe = get_feature_pipeline()
+                X_tr = pipe.fit_transform(split.X_train)
+                X_va = pipe.transform(split.X_validation)
 
                 model = model_cls(best_params)
                 model.fit(X_tr, split.y_train)
                 preds = model.predict(X_va)
 
-                eval_res = self.evaluator.evaluate(split.y_val, preds)
-                fold_metrics.append(eval_res.metrics)
+                fold_metrics.append(self.evaluator.evaluate(split.y_validation, preds).metrics)
 
-            # Compute aggregated cross-validation metrics
             avg_metrics = {
-                m: float(sum(f[m] for f in fold_metrics) / len(fold_metrics))
-                for m in fold_metrics[0]
+                k: float(sum(f[k] for f in fold_metrics) / len(fold_metrics))
+                for k in fold_metrics[0]
             }
 
             self.tracker.log_params(best_params)
             self.tracker.log_metrics(avg_metrics)
 
-            # 3. Artifact Serialization
             with tempfile.TemporaryDirectory() as tmp_dir:
                 artifact_dir = Path(tmp_dir) / model_cfg.name
                 model.save(artifact_dir)
