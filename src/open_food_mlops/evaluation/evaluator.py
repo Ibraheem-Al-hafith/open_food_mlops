@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any
+
 import pandas as pd
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,6 +33,7 @@ class Evaluator:
 
     def evaluate(self, y_true: pd.Series, y_pred: pd.Series) -> EvaluationResult:
         """Compute evaluation metrics comparing ground truth with predictions."""
+        logger.debug("Evaluating predictions over %d samples.", len(y_true))
         acc = float(accuracy_score(y_true, y_pred))
         prec = float(precision_score(y_true, y_pred, average="macro", zero_division=0))
         rec = float(recall_score(y_true, y_pred, average="macro", zero_division=0))
@@ -41,6 +46,13 @@ class Evaluator:
             "macro_f1": f1,
         }
 
+        logger.info(
+            "Evaluation metrics computed: accuracy=%.4f, precision=%.4f, recall=%.4f, macro_f1=%.4f",
+            acc,
+            prec,
+            rec,
+            f1,
+        )
         return EvaluationResult(
             metrics=metrics, primary_metric_name=self.primary_metric
         )

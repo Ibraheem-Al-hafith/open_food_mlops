@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from .base import BaseModel
 from .config import ModelConfig
 from .registry import get_model_class
+
+logger = logging.getLogger(__name__)
 
 
 def create_model(
@@ -27,6 +30,7 @@ def create_model(
         >>> model = create_model(config)
         >>> model.fit(X_train, y_train)
     """
+    logger.info("Creating model instance for %s with overrides: %s", config.name, sorted(overrides))
     model_class = get_model_class(config.name)
 
     params = {
@@ -35,4 +39,5 @@ def create_model(
         **overrides,
     }
 
+    logger.debug("Resolved model params for %s: %s", config.name, params)
     return model_class(params)

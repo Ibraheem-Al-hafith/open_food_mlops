@@ -21,11 +21,14 @@ transformers should inherit from ``BaseFeatureTransformer``.
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Sequence
 from typing import Any, Self
 
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 
 class BaseFeatureTransformer(ABC):
@@ -87,6 +90,11 @@ class BaseFeatureTransformer(ABC):
             ValueError: If ``X`` has no columns or duplicate column names.
         """
         self._validate_input(X)
+        logger.debug(
+            "Fitting transformer %s on %d input features.",
+            self.__class__.__name__,
+            len(X.columns),
+        )
 
         self.feature_names_in_ = tuple(str(column) for column in X.columns)
         self.n_features_in_ = len(self.feature_names_in_)
@@ -122,6 +130,12 @@ class BaseFeatureTransformer(ABC):
         self._validate_input(X)
         self._validate_feature_names(X)
 
+        logger.debug(
+            "Transforming data with %s from %d to %d features.",
+            self.__class__.__name__,
+            len(X.columns),
+            len(self.feature_names_out_),
+        )
         transformed = self._transform(X)
 
         if not isinstance(transformed, pd.DataFrame):
@@ -161,6 +175,11 @@ class BaseFeatureTransformer(ABC):
             )
             self.n_features_out_ = len(self.feature_names_out_)
 
+        logger.debug(
+            "Completed fit_transform for %s with output columns=%s",
+            self.__class__.__name__,
+            self.feature_names_out_,
+        )
         return transformed
 
     def get_feature_names_in(self) -> tuple[str, ...]:
@@ -398,8 +417,10 @@ class FeaturePipeline(BaseFeatureTransformer):
         self.transformers: tuple[
             BaseFeatureTransformer, ...
         ] = tuple(transformers)
+        logger.info("Initializing FeaturePipeline with %d transformer(s).", len(self.transformers))
 
         if not self.transformers:
+            logger.error("FeaturePipeline received no transformers.")
             raise ValueError(
                 "FeaturePipeline requires at least one transformer."
             )
@@ -411,6 +432,7 @@ class FeaturePipeline(BaseFeatureTransformer):
         ]
 
         if invalid:
+            logger.error("FeaturePipeline contains invalid component types: %s", invalid)
             raise TypeError(
                 "All pipeline components must inherit from "
                 "BaseFeatureTransformer."
@@ -457,6 +479,11 @@ class FeaturePipeline(BaseFeatureTransformer):
 
         self.feature_names_in_ = tuple(str(column) for column in X.columns)
         self.n_features_in_ = len(self.feature_names_in_)
+        logger.info(
+            "Fitting feature pipeline with %d transformer(s) on %d input columns.",
+            len(self.transformers),
+            len(X.columns),
+        )
 
         current = X
 
@@ -468,6 +495,10 @@ class FeaturePipeline(BaseFeatureTransformer):
         )
         self.n_features_out_ = len(self.feature_names_out_)
         self.is_fitted_ = True
+        logger.info(
+            "Feature pipeline fitted successfully. Output columns: %s",
+            self.feature_names_out_,
+        )
 
         return current
 

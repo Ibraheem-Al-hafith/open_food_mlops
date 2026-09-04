@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -9,6 +10,8 @@ from typing import Any
 
 from ..base import BaseModel
 from ..specs import SearchSpace
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)

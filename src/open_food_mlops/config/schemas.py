@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Literal
+
 from pydantic import BaseModel, ConfigDict, Field
+
+logger = logging.getLogger(__name__)
+
+logger.debug("Loaded configuration schemas for the pipeline.")
 
 
 class DataConfig(BaseModel):

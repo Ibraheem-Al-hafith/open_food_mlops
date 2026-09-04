@@ -9,12 +9,15 @@ training pipeline. The pipeline interacts only with these abstractions.
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, ClassVar, Self
 
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 from .specs import SearchSpace
 
@@ -52,6 +55,7 @@ class BaseModel(ABC):
         self.config: dict[str, Any] = dict(config or {})
         self.estimator_: Any | None = None
         self.is_fitted_: bool = False
+        logger.debug("Initialized %s model with config: %s", self.__class__.__name__, self.config)
 
     @abstractmethod
     def fit(
@@ -147,6 +151,7 @@ class BaseModel(ABC):
 
         destination = Path(path)
         destination.mkdir(parents=True, exist_ok=True)
+        logger.info("Saving model %s to %s", self.model_name, destination)
 
         self._save(destination)
 
@@ -163,6 +168,7 @@ class BaseModel(ABC):
         Returns:
             Restored model instance.
         """
+        logger.info("Loading model %s from %s", cls.__name__, path)
         return cls._load(Path(path))
 
     @abstractmethod
@@ -183,6 +189,7 @@ class BaseModel(ABC):
     def _check_is_fitted(self) -> None:
         """Raise an error if the model has not been fitted."""
         if not self.is_fitted_:
+            logger.error("Attempted to use unfitted model %s.", self.model_name)
             raise RuntimeError(
                 f"Model {self.model_name!r} has not been fitted. "
                 "Call fit() before this operation."

@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 import joblib
 from pathlib import Path
 from typing import Self
 
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
+
+logger = logging.getLogger(__name__)
 
 from ..base import BaseModel
 from ..registry import register
@@ -30,6 +33,7 @@ class RandomForestModel(BaseModel):
         y: pd.Series,
     ) -> Self:
         """Fit the Random Forest classifier."""
+        logger.info("Fitting RandomForestClassifier with config: %s", self.config)
         self.estimator_ = RandomForestClassifier(
             **self.config,
         )
@@ -37,6 +41,7 @@ class RandomForestModel(BaseModel):
         self.estimator_.fit(X, y)
 
         self.is_fitted_ = True
+        logger.info("RandomForestClassifier fitted successfully on %d rows.", len(X))
 
         return self
 
@@ -48,6 +53,7 @@ class RandomForestModel(BaseModel):
         self._check_is_fitted()
 
         assert self.estimator_ is not None
+        logger.debug("Generating RandomForest predictions for %d rows.", len(X))
         predictions = self.estimator_.predict(X)
 
         return pd.Series(

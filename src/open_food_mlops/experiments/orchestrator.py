@@ -43,26 +43,30 @@ class ExperimentOrchestrator:
             direction=plan.selection.direction,
             gates=plan.selection.gates,
         )
+        self.data_config = plan.data
 
     def run(self) -> SelectionResult:
         """Executes full experiment pipeline across all enabled models."""
         data_provider = TabularDataProvider(
             data_path=self.plan.data.data_path,
             target_column=self.plan.data.target_column,
+            # config=self.data.
             # n_splits=self.plan.data.n_splits,
             # random_state=self.plan.data.random_state,
         )
 
         candidates: list[CandidateResult] = []
-
         for model_cfg in self.plan.models:
-            if not model_cfg.enabled:
-                logger.info("Skipping disabled model: %s", model_cfg.name)
-                continue
+            try: 
+                if not model_cfg.enabled:
+                    logger.info("Skipping disabled model: %s", model_cfg.name)
+                    continue
 
-            logger.info("Starting execution for model: %s", model_cfg.name)
-            candidate = self._run_model_pipeline(model_cfg, data_provider)
-            candidates.append(candidate)
+                logger.info("Starting execution for model: %s", model_cfg.name)
+                candidate = self._run_model_pipeline(model_cfg, data_provider)
+                candidates.append(candidate)
+            except Exception as e:
+                logger.error(f"Error running model: {model_cfg.name}: {e}")
 
         selection_result = self.selection_engine.select_champion(candidates)
         if selection_result.champion:

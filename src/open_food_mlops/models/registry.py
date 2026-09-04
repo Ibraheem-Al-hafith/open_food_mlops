@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterator
 from typing import TypeVar
 
 from .base import BaseModel
+
+logger = logging.getLogger(__name__)
 
 
 ModelType = TypeVar("ModelType", bound=type[BaseModel])
@@ -50,6 +53,7 @@ def register(
             )
 
         _MODEL_REGISTRY[normalized_name] = model_class
+        logger.info("Registered model %s from %s", normalized_name, model_class.__module__)
 
         return model_class
 
@@ -73,9 +77,12 @@ def get_model_class(
     normalized_name = name.strip().lower()
 
     try:
-        return _MODEL_REGISTRY[normalized_name]
+        model_class = _MODEL_REGISTRY[normalized_name]
+        logger.debug("Resolved registered model class for %s: %s", name, model_class.__name__)
+        return model_class
     except KeyError as exc:
         available = ", ".join(sorted(_MODEL_REGISTRY)) or "<empty>"
+        logger.error("Attempted to resolve unregistered model %r. Available: %s", name, available)
 
         raise KeyError(
             f"Model {name!r} is not registered. "
@@ -89,4 +96,6 @@ def registered_models() -> Iterator[str]:
     Returns:
         Iterator over registered model names.
     """
-    yield from sorted(_MODEL_REGISTRY)
+    models = sorted(_MODEL_REGISTRY)
+    logger.debug("Listing registered models: %s", models)
+    yield from models

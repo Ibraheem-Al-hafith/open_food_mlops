@@ -13,10 +13,13 @@ It should not contain feature-engineering implementation details.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from .base import FeaturePipeline
 from .identity import IdentityTransformer
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -36,6 +39,7 @@ def get_feature_pipeline() -> FeaturePipeline:
         >>> X_engineered = pipeline.fit_transform(X_train)
         >>> X_test_engineered = pipeline.transform(X_test)
     """
+    logger.info("Building feature pipeline.")
     transformers = []
 
     # Concrete transformers will be added here:
@@ -54,9 +58,11 @@ def get_feature_pipeline() -> FeaturePipeline:
     )
 
     if not transformers:
+        logger.error("Feature pipeline was requested without any transformers.")
         raise RuntimeError(
             "The feature pipeline has no configured transformers. "
             "Add feature transformers before calling get_feature_pipeline()."
         )
 
+    logger.info("Feature pipeline configured with %d transformer(s).", len(transformers))
     return FeaturePipeline(transformers)

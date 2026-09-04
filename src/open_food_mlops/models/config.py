@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
+
+logger = logging.getLogger(__name__)
+
+logger.debug("Loaded core model configuration definitions.")
 
 
 class TuningConfig(BaseModel):

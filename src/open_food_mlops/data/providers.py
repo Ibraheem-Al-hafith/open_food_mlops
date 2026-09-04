@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -9,6 +10,8 @@ from typing import Iterator
 
 import numpy as np
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 from sklearn.model_selection import (
     KFold,
     ShuffleSplit,
@@ -141,20 +144,29 @@ class TabularDataProvider(BaseDataProvider):
 
     def _load_and_partition(self) -> None:
         """Loads data from disk and isolates holdout test data from training pool."""
+        logger.info("Loading dataset from %s for tabular splitting.", self.data_path)
         if self.data_path.endswith(".parquet"):
             df = pd.read_parquet(self.data_path)
         else:
             df = pd.read_csv(self.data_path)
 
         if df.empty:
+            logger.error("Dataset at %s is empty.", self.data_path)
             raise ValueError("Cannot process empty dataset.")
 
         if self.target_column not in df.columns:
+            logger.error(
+                "Target column %r missing from dataset at %s. Available columns: %s",
+                self.target_column,
+                self.data_path,
+                list(df.columns[:10]),
+            )
             raise KeyError(
                 f"Target column '{self.target_column}' not found in dataset at {self.data_path}"
             )
 
         if df[self.target_column].isna().any():
+            logger.error("Target column %s contains missing values.", self.target_column)
             raise ValueError(
                 f"Target column '{self.target_column}' contains unhandled missing values."
             )
@@ -162,6 +174,12 @@ class TabularDataProvider(BaseDataProvider):
         X = df.drop(columns=[self.target_column])
         y = df[self.target_column]
 
+        logger.info(
+            "Preparing train/test split with test_size=%s, stratify=%s, random_state=%s",
+            self.config.test.test_size,
+            self.config.test.stratify,
+            self.config.test.random_state,
+        )
         stratify = y if self.config.test.stratify else None
 
         train_idx, test_idx = train_test_split(
@@ -176,6 +194,12 @@ class TabularDataProvider(BaseDataProvider):
         self._X_test = X.iloc[test_idx].reset_index(drop=True)
         self._y_test = y.iloc[test_idx].reset_index(drop=True)
 
+        logger.info(
+            "Dataset partitioned: dev_shape=%s, test_shape=%s",
+            self._X_dev.shape,
+            self._X_test.shape,
+        )
+
     @property
     def test_set(self) -> tuple[pd.DataFrame, pd.Series]:
         """Return static held-out test features and labels."""
@@ -184,6 +208,11 @@ class TabularDataProvider(BaseDataProvider):
     def get_splits(self) -> Iterator[DataSplit]:
         """Yield DataSplit pairs across configured validation folds lazily."""
         v_cfg = self.config.validation
+        logger.info(
+            "Generating validation splits using method=%s, n_splits=%s",
+            v_cfg.method,
+            v_cfg.n_splits,
+        )
 
         if v_cfg.method == ValidationMethod.TRAIN_TEST_SPLIT:
             if v_cfg.stratify:
