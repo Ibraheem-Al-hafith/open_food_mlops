@@ -1,47 +1,50 @@
+"""Logging configuration loader using centralized environment settings."""
+
 import os
 import logging
 import logging.config
 import yaml
 
+from open_food_mlops.config.settings import settings
 
-def setup_logging(config_path: str = "config/logging.yaml") -> None:
+
+def setup_logging(config_path: str | None = None) -> None:
+    """Initializes the logging infrastructure using dynamic configuration.
+
+    Args:
+        config_path: Path to logging YAML configuration file. Defaults to `settings.log_config_path`.
     """
-    Initializes the logging infrastructure for the project.
+    resolved_path = config_path or settings.log_config_path
 
-    Loads configuration from a declarative YAML manifest, handles environmental
-    safeguards like directory creation, sanitizes runtime contexts such as Jupyter Notebook environments.
-    """
-
-    if not os.path.exists(config_path):
+    if not os.path.exists(resolved_path):
         logging.basicConfig(level=logging.INFO)
         logging.warning(
-            f"Logging configuration file not found at {config_path}. Fallback to basic configuration."
+            "Logging configuration file not found at %s. Fallback to basic configuration.",
+            resolved_path,
         )
         return
 
     try:
-        # Loading configuration file
-        with open(config_path, "r") as yaml_config_file:
+        with open(resolved_path, "r", encoding="utf-8") as yaml_config_file:
             config = yaml.safe_load(yaml_config_file)
 
         handlers = config.get("handlers", {})
-        for handler_name, handler_config in handlers.items():
+        for handler_config in handlers.values():
             if "filename" in handler_config:
                 log_file = handler_config["filename"]
                 log_dir = os.path.dirname(log_file)
                 if log_dir and not os.path.exists(log_dir):
                     os.makedirs(log_dir, exist_ok=True)
 
-        # Clean duplicate handlers to handle notebook environments gracefully
         root_logger = logging.getLogger()
         if root_logger.handlers:
             for handler in root_logger.handlers[:]:
                 root_logger.removeHandler(handler)
 
-        # Apply structural dictionary configurations:
         logging.config.dictConfig(config=config)
         logging.info(
-            f"Logging infrastructure successfully configured via {config_path}."
+            "Logging infrastructure successfully configured via %s.",
+            resolved_path,
         )
 
     except Exception as e:
@@ -51,9 +54,3 @@ def setup_logging(config_path: str = "config/logging.yaml") -> None:
             str(e),
             exc_info=True,
         )
-
-
-if __name__ == "__main__":
-    setup_logging()
-    logger = logging.getLogger(__name__)
-    logger.debug("Hello from loggin.py!!")

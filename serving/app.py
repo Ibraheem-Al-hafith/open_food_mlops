@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException, status
 
-from open_food_mlops.config.schemas import TrackingConfig
+from open_food_mlops.config.settings import settings
 from serving.schemas import NovaPredictRequest, NovaPredictResponse
 
 logger = logging.getLogger(__name__)
@@ -21,8 +21,8 @@ MODEL_CONTAINER: Dict[str, Any] = {}
 
 
 def _load_champion_model(
-    tracking_uri: str = "sqlite:///mlflow.db",
-    experiment_name: str = "open_food_classification_experiment",
+    tracking_uri: str,
+    experiment_name: str,
 ) -> Any:
     """Dynamically discover and load the top-performing finished model from MLflow.
 
@@ -43,7 +43,6 @@ def _load_champion_model(
     if not experiment:
         raise RuntimeError(f"MLflow experiment '{experiment_name}' does not exist.")
 
-    # Search for top-performing completed runs
     runs = client.search_runs(
         experiment_ids=[experiment.experiment_id],
         filter_string="attributes.status = 'FINISHED'",
@@ -56,12 +55,10 @@ def _load_champion_model(
             f"No finished runs found in MLflow experiment '{experiment_name}'."
         )
 
-    # Inspect run artifacts to locate the logged model directory dynamically
     for run in runs:
         run_id = run.info.run_id
         artifacts = client.list_artifacts(run_id)
 
-        # Look for artifact directories containing an MLmodel file
         model_subpath = None
         for art in artifacts:
             if art.is_dir:
@@ -72,7 +69,6 @@ def _load_champion_model(
                     model_subpath = art.path
                     break
 
-        # Fallback to standard artifact location if root MLmodel exists
         if not model_subpath:
             if any("MLmodel" in art.path for art in artifacts):
                 model_uri = f"runs:/{run_id}"
@@ -98,10 +94,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Manage application startup and model loading lifecycle."""
     logger.info("Initializing REST Serving Layer...")
     try:
-        tracking_cfg = TrackingConfig()
         MODEL_CONTAINER["champion"] = _load_champion_model(
-            tracking_uri=tracking_cfg.tracking_uri,
-            experiment_name=tracking_cfg.experiment_name,
+            tracking_uri=settings.mlflow_tracking_uri,
+            experiment_name=settings.mlflow_experiment_name,
         )
         logger.info("Champion model successfully loaded and ready for inference.")
     except Exception as exc:
@@ -132,18 +127,9 @@ def health_check() -> Dict[str, str]:
 def _extract_probabilities_and_pred(
     champion: Any, input_data: pd.DataFrame
 ) -> Tuple[int, float]:
-    """Extract prediction and probability safely from MLflow PyFunc or underlying flavor.
-
-    Args:
-        champion: MLflow PyFunc model instance.
-        input_data: DataFrame formatted with appropriate input features.
-
-    Returns:
-        Tuple containing (raw_pred_class_index, probability_confidence).
-    """
+    """Extract prediction and probability safely from MLflow PyFunc or underlying flavor."""
     candidate_estimators = []
 
-    # Safely attempt unwrap_python_model without failing on _SklearnModelWrapper
     if hasattr(champion, "unwrap_python_model"):
         try:
             unwrapped = champion.unwrap_python_model()
@@ -152,7 +138,6 @@ def _extract_probabilities_and_pred(
         except Exception:
             pass
 
-    # Inspect internal MLflow implementation objects
     model_impl = getattr(champion, "_model_impl", None)
     if model_impl is not None:
         sklearn_model = getattr(model_impl, "sklearn_model", None)
@@ -162,7 +147,6 @@ def _extract_probabilities_and_pred(
 
     candidate_estimators.append(champion)
 
-    # 1. Attempt predict_proba execution across extracted estimator targets
     for estimator in candidate_estimators:
         if hasattr(estimator, "predict_proba"):
             try:
@@ -175,17 +159,14 @@ def _extract_probabilities_and_pred(
                 logger.debug("Failed predict_proba call on candidate %s: %s", estimator, exc)
                 continue
 
-    # 2. Fallback: Inspect standard pyfunc predict output
     preds = champion.predict(input_data)
     if isinstance(preds, pd.DataFrame):
         preds = preds.to_numpy()
 
-    # Probability distribution output (N x K array)
     if isinstance(preds, np.ndarray) and preds.ndim == 2 and preds.shape[1] > 1:
         best_idx = int(np.argmax(preds[0]))
         return best_idx, float(preds[0][best_idx])
 
-    # Single value class prediction output
     raw_pred = int(preds[0]) if isinstance(preds, (np.ndarray, list)) else int(preds)
     return raw_pred, 1.0
 
@@ -206,11 +187,7 @@ def predict(request: NovaPredictRequest) -> NovaPredictResponse:
 
     try:
         input_data = pd.DataFrame([request.model_dump(by_alias=True)])
-
-        # Extract prediction index and probability dynamically
         raw_pred, confidence = _extract_probabilities_and_pred(champion, input_data)
-
-        # Map 0-indexed output classes (0-3) to standard NOVA groups (1-4)
         nova_group = raw_pred + 1 if raw_pred < 4 else raw_pred
 
         return NovaPredictResponse(
