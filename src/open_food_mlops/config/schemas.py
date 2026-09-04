@@ -70,7 +70,7 @@ class TrackingConfig(BaseModel):
 
     backend: str = "mlflow"
     tracking_uri: str = "sqlite:///mlflow.db"
-    experiment_name: str = "open-food-mlops"
+    experiment_name: str = "open-food-mlops-v2"
 
 
 class ExperimentPlan(BaseModel):

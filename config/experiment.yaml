@@ -75,4 +75,4 @@ selection:
 tracking:
   backend: mlflow
   tracking_uri: sqlite:///mlflow.db
-  experiment_name: open-food-mlops
+  experiment_name: open-food-mlops-v2
