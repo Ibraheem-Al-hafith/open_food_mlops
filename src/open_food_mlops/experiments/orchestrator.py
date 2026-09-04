@@ -140,8 +140,19 @@ class ExperimentOrchestrator:
                 for k in fold_metrics[0]
             }
 
+            """Surgical update to Experiment Orchestrator to trigger model registration during run completion."""
             self.tracker.log_params(best_params)
             self.tracker.log_metrics(avg_metrics)
+
+            # --- MODEL REGISTRATION ADDITION ---
+            # Register the trained model directly into MLflow Registry
+            registered_name = f"open_food_{model_cfg.name}"
+            self.tracker.register_model(
+                model=model,
+                artifact_path="model",
+                registered_model_name=registered_name,
+            )
+            # ------------------------------------
 
             with tempfile.TemporaryDirectory() as tmp_dir:
                 artifact_dir = Path(tmp_dir) / model_cfg.name

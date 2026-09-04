@@ -17,9 +17,9 @@ features:
 models:
   - name: decision_tree
     enabled: true
-    params:
-      max_depth: 10
-      criterion: gini
+    # params:
+    #   max_depth: 10
+    #   criterion: gini
     tuning:
       enabled: false
       method: optuna
@@ -29,19 +29,19 @@ models:
 
   - name: random_forest
     enabled: true
-    params:
-      n_estimators: 100
-      max_depth: 15
+    # params:
+    #   n_estimators: 100
+    #   max_depth: 15
     tuning:
       enabled: false
       trials: 5
       direction: maximize
       random_state: 42
   - name: "logistic_regression"
-    enabled: false
-    params:
-      max_iter: 200
-      C: 1.0
+    enabled: true
+    # params:
+    #   max_iter: 200
+    #   C: 1.0
     tuning:
       enabled: false
       method: "optuna"
@@ -51,7 +51,7 @@ models:
   - name: "xgboost"
     enabled: true
     tuning:
-      enabled: true
+      enabled: false
       method: "optuna"
       trials: 3
       direction: "maximize"
@@ -59,7 +59,7 @@ models:
   - name: "lightgbm"
     enabled: true
     tuning:
-      enabled: true
+      enabled: false
       method: "optuna"
       trials: 3
       direction: "maximize"
