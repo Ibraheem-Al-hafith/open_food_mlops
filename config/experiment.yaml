@@ -74,5 +74,5 @@ selection:
 
 tracking:
   backend: mlflow
-  tracking_uri: sqlite:///mlflow.db
+  tracking_uri: http://localhost:5000
   experiment_name: open-food-mlops-v2

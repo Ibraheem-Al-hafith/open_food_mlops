@@ -1,0 +1,13 @@
+services:
+
+  mlflow:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.mlflow
+
+    ports:
+      - "5000:5000"
+
+    volumes:
+      - ./mlflow/mlflow.db:/mlflow/mlflow.db
+      - ./mlflow/mlruns:/mlflow/mlruns
