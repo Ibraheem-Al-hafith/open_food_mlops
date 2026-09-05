@@ -75,4 +75,4 @@ selection:
 tracking:
   backend: mlflow
   tracking_uri: http://localhost:5000
-  experiment_name: open-food-mlops-v2
+  experiment_name: testing-mlflow-as-service

@@ -13,4 +13,5 @@ CMD ["mlflow", "server", \
      "--port", "5000", \
      "--backend-store-uri", "sqlite:////mlflow/mlflow.db", \
      "--artifacts-destination", "/mlflow/mlruns", \
-     "--serve-artifacts"]
+     "--serve-artifacts", \
+     "--allowed-hosts", "*"]
