@@ -146,21 +146,28 @@ class OpenFoodFactsDataIngestor(BaseDataIngestor):
         processed_chunks: List[pd.DataFrame] = []
 
         def clean_df(df: pd.DataFrame) -> pd.DataFrame:
-            for col in ["code", "product_name"]:
-                if col in df.columns:
-                    df.drop(columns=[col], inplace=True)
-            df = df[self.config.features].dropna(subset=[self.config.target]).apply(
+            codes = df["code"].copy() if "code" in df.columns else None
+
+            if "product_name" in df.columns:
+                df.drop(columns=["product_name"], inplace=True, errors="ignore")
+
+            cleaned = df[self.config.features].dropna(subset=[self.config.target]).apply(
                 lambda x: pd.to_numeric(x, errors="coerce")
             )
-            df = df[df[self.config.target].isin([1.0, 2.0, 3.0, 4.0])]
-            df[self.config.target] -= 1
-            return df
+            cleaned = cleaned[cleaned[self.config.target].isin([1.0, 2.0, 3.0, 4.0])].copy()
+            cleaned[self.config.target] -= 1
+
+            if codes is not None:
+                cleaned["product_code"] = codes.loc[cleaned.index].astype(str)
+
+            return cleaned
 
         try:
+            read_cols = self.config.features + ["code", "product_name"]
             reader = pd.read_csv(
                 self.config.raw_file_path,
                 sep="\t",
-                usecols=lambda col: col in self.config.features,
+                usecols=lambda col: col in read_cols,
                 chunksize=self.config.read_chunk_size,
                 low_memory=False,
                 on_bad_lines="skip",

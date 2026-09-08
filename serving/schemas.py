@@ -1,5 +1,6 @@
 """Pydantic schemas for the FastAPI inference service."""
 
+from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -8,6 +9,9 @@ class NovaPredictRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    product_code: Optional[str] = Field(
+        None, description="Unique product barcode identifier for operational tracking"
+    )
     added_sugars_100g: float = Field(..., alias="added-sugars_100g", ge=0.0)
     fat_100g: float = Field(..., ge=0.0)
     proteins_100g: float = Field(..., ge=0.0)

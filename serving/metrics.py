@@ -6,9 +6,8 @@ import time
 from typing import Callable
 
 from fastapi import FastAPI, Request, Response
-from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
+from prometheus_client import Gauge, Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 
-# Operational HTTP metrics
 HTTP_REQUESTS_TOTAL = Counter(
     "http_requests_total",
     "Total HTTP requests received",
@@ -21,7 +20,6 @@ HTTP_REQUEST_DURATION_SECONDS = Histogram(
     ["method", "endpoint"],
 )
 
-# Inference specific metrics
 PREDICTION_COUNTER = Counter(
     "model_predictions_total",
     "Total model predictions served",
@@ -33,13 +31,19 @@ PREDICTION_LATENCY = Histogram(
     "Time spent running model prediction logic in seconds",
 )
 
+MODEL_PRODUCTION_MACRO_F1 = Gauge(
+    "model_production_macro_f1",
+    "Calculated production Macro-F1 score against delayed ground truth labels",
+)
+
+MODEL_DEGRADATION_RATIO = Gauge(
+    "model_degradation_ratio",
+    "Ratio of current production Macro-F1 over baseline champion training Macro-F1",
+)
+
 
 def setup_monitoring(app: FastAPI) -> None:
-    """Instrument FastAPI application with Prometheus metrics middleware and endpoint.
-
-    Args:
-        app: FastAPI application instance.
-    """
+    """Instrument FastAPI application with Prometheus metrics middleware and endpoint."""
 
     @app.middleware("http")
     async def metrics_middleware(request: Request, call_next: Callable) -> Response:
