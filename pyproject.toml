@@ -23,6 +23,7 @@ dependencies = [
     "xgboost>=3.4.0",
     "pydantic-settings>=2.15.0",
     "prometheus-client>=0.26.0",
+    "evidently>=0.7.21",
 ]
 
 [tool.pytest.ini_options]
