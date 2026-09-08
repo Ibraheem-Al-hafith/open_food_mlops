@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
 import logging
+import time
+from contextlib import asynccontextmanager
 from typing import Any, AsyncGenerator, Dict, Tuple
 
 import mlflow
 import numpy as np
 import pandas as pd
-from fastapi import FastAPI, HTTPException, status
+from fastapi import BackgroundTasks, FastAPI, HTTPException, status
 
 from open_food_mlops.config.settings import settings
+from serving.metrics import PREDICTION_COUNTER, PREDICTION_LATENCY, setup_monitoring
+from serving.prediction_store import prediction_store
 from serving.schemas import NovaPredictRequest, NovaPredictResponse
 
 logger = logging.getLogger(__name__)
@@ -23,7 +26,7 @@ MODEL_CONTAINER: Dict[str, Any] = {}
 def _load_champion_model(
     tracking_uri: str,
     experiment_name: str,
-) -> Any:
+) -> Tuple[Any, str]:
     """Dynamically discover and load the top-performing finished model from MLflow.
 
     Args:
@@ -31,7 +34,7 @@ def _load_champion_model(
         experiment_name: MLflow experiment namespace.
 
     Returns:
-        Loaded pyfunc MLflow model.
+        Tuple containing loaded pyfunc MLflow model and its MLflow run ID/version.
 
     Raises:
         RuntimeError: If experiment or usable model artifacts cannot be resolved.
@@ -79,7 +82,8 @@ def _load_champion_model(
 
         try:
             logger.info("Attempting to load model from MLflow URI: %s", model_uri)
-            return mlflow.pyfunc.load_model(model_uri)
+            loaded_model = mlflow.pyfunc.load_model(model_uri)
+            return loaded_model, run_id
         except Exception as exc:
             logger.warning("Failed loading model from URI %s: %s", model_uri, exc)
             continue
@@ -94,14 +98,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Manage application startup and model loading lifecycle."""
     logger.info("Initializing REST Serving Layer...")
     try:
-        MODEL_CONTAINER["champion"] = _load_champion_model(
+        model, run_id = _load_champion_model(
             tracking_uri=settings.mlflow_tracking_uri,
             experiment_name=settings.mlflow_experiment_name,
         )
-        logger.info("Champion model successfully loaded and ready for inference.")
+        MODEL_CONTAINER["champion"] = model
+        MODEL_CONTAINER["model_version"] = run_id
+        logger.info("Champion model %s successfully loaded and ready for inference.", run_id)
     except Exception as exc:
         logger.error("Champion model initialization failed: %s", exc)
         MODEL_CONTAINER["champion"] = None
+        MODEL_CONTAINER["model_version"] = "unknown"
 
     yield
     MODEL_CONTAINER.clear()
@@ -113,6 +120,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Register Phase 1 monitoring middleware and metrics endpoint
+setup_monitoring(app)
+
 
 @app.get("/health", status_code=status.HTTP_200_OK)
 def health_check() -> Dict[str, str]:
@@ -121,6 +131,7 @@ def health_check() -> Dict[str, str]:
     return {
         "status": "healthy" if is_ready else "degraded",
         "model_loaded": str(is_ready),
+        "model_version": MODEL_CONTAINER.get("model_version", "unknown"),
     }
 
 
@@ -176,7 +187,10 @@ def _extract_probabilities_and_pred(
     response_model=NovaPredictResponse,
     status_code=status.HTTP_200_OK,
 )
-def predict(request: NovaPredictRequest) -> NovaPredictResponse:
+def predict(
+    request: NovaPredictRequest,
+    background_tasks: BackgroundTasks,
+) -> NovaPredictResponse:
     """Execute real-time NOVA group classification using loaded champion model."""
     champion = MODEL_CONTAINER.get("champion")
     if champion is None:
@@ -186,9 +200,24 @@ def predict(request: NovaPredictRequest) -> NovaPredictResponse:
         )
 
     try:
-        input_data = pd.DataFrame([request.model_dump(by_alias=True)])
+        start_time = time.perf_counter()
+        feature_dict = request.model_dump(by_alias=True)
+        input_data = pd.DataFrame([feature_dict])
         raw_pred, confidence = _extract_probabilities_and_pred(champion, input_data)
         nova_group = raw_pred + 1 if raw_pred < 4 else raw_pred
+
+        # Operational metrics instrumentation
+        PREDICTION_LATENCY.observe(time.perf_counter() - start_time)
+        PREDICTION_COUNTER.labels(nova_group=str(nova_group)).inc()
+
+        # Non-blocking prediction persistence to Parquet storage
+        background_tasks.add_task(
+            prediction_store.record_prediction,
+            features=feature_dict,
+            prediction=nova_group,
+            probability=round(confidence, 4),
+            model_version=MODEL_CONTAINER.get("model_version"),
+        )
 
         return NovaPredictResponse(
             nova_group=nova_group,
