@@ -24,6 +24,7 @@ dependencies = [
     "pydantic-settings>=2.15.0",
     "prometheus-client>=0.26.0",
     "evidently>=0.7.21",
+    "prefect>=3.8.5",
 ]
 
 [tool.pytest.ini_options]

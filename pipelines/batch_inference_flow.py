@@ -172,6 +172,13 @@ def run_batch_inference(
         logger.info("Subsampling batch data to %d rows.", sample_size)
         df = df.sample(n=sample_size, random_state=42).reset_index(drop=True)
 
+    # Extract product codes if present before subsetting features
+    product_codes = None
+    if "product_code" in df.columns:
+        product_codes = df["product_code"].astype(str).tolist()
+    elif "code" in df.columns:
+        product_codes = df["code"].astype(str).tolist()
+
     # Strictly enforce schema matching using canonical data features
     missing_features = [f for f in FEATURES if f not in df.columns]
     if missing_features:
@@ -191,11 +198,13 @@ def run_batch_inference(
 
     logger.info("Persisting %d batch predictions to %s...", len(feature_df), output_store_path)
     for idx, row in feature_df.iterrows():
+        p_code = product_codes[idx] if product_codes else "unknown"
         store.record_prediction(
             features=row.to_dict(),
             prediction=int(nova_groups[idx]),
             probability=round(float(max_probs[idx]), 4),
             model_version=run_id,
+            product_code=p_code,
         )
 
     logger.info("Batch inference completed successfully. Generated %d predictions.", len(feature_df))

@@ -105,7 +105,7 @@ def evaluate_production_performance(
         truth_df[["product_code", "nova_group"]],
         on="product_code",
         how="inner",
-        suffixes=("_pred", "_true"),
+        #suffixes=("_pred", "_true"),
     )
 
     if merged_df.empty:
@@ -114,7 +114,7 @@ def evaluate_production_performance(
         )
         return None
 
-    y_true = merged_df["nova_group_true"].astype(int)
+    y_true = merged_df["nova_group"].astype(int)
     if y_true.max() > 3:
         y_true = y_true - 1
 

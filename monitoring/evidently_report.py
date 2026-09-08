@@ -60,7 +60,7 @@ def push_drift_metrics(
 def generate_drift_reports(
     reference_path: str = "data/processed/processed_data.parquet",
     current_path: str = "data/production/predictions.parquet",
-    output_dir: str = "reports",
+    output_dir: str = "data/monitoring/reports",
     gateway_url: str = PUSHGATEWAY_URL,
     job_name: str = "batch_evidently_feature_drift",
 ) -> Path:
@@ -117,3 +117,54 @@ def generate_drift_reports(
     )
 
     return report_file
+
+def main() -> None:
+    """CLI driver for drift report generation and metric pushing."""
+    setup_logging()
+    parser = argparse.ArgumentParser(
+        description="Generate Evidently Data Drift Report and push metrics to Pushgateway."
+    )
+    parser.add_argument(
+        "--reference-path",
+        type=str,
+        default="data/monitoring/reference.parquet",
+        help="Path to baseline reference dataset.",
+    )
+    parser.add_argument(
+        "--current-path",
+        type=str,
+        default="data/production/predictions.parquet",
+        help="Path to current production predictions dataset.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="data/monitoring/reports",
+        help="Destination directory for HTML reports.",
+    )
+    parser.add_argument(
+        "--gateway-url",
+        type=str,
+        default=PUSHGATEWAY_URL,
+        help="Prometheus Pushgateway endpoint URL.",
+    )
+    parser.add_argument(
+        "--job-name",
+        type=str,
+        default="batch_evidently_feature_drift",
+        help="Prometheus Pushgateway batch job identifier.",
+    )
+
+    args = parser.parse_args()
+
+    generate_drift_reports(
+        reference_path=args.reference_path,
+        current_path=args.current_path,
+        output_dir=args.output_dir,
+        gateway_url=args.gateway_url,
+        job_name=args.job_name,
+    )
+
+
+if __name__ == "__main__":
+    main()
