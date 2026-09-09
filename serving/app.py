@@ -10,8 +10,9 @@ from typing import Any, AsyncGenerator, Dict, Tuple
 import mlflow
 import numpy as np
 import pandas as pd
-from fastapi import BackgroundTasks, FastAPI, HTTPException, status
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Response, status
 
+from open_food_mlops.config.features import FEATURE_COLUMNS
 from open_food_mlops.config.settings import settings
 from serving.metrics import PREDICTION_COUNTER, PREDICTION_LATENCY, setup_monitoring
 from serving.prediction_store import prediction_store
@@ -19,92 +20,56 @@ from serving.schemas import NovaPredictRequest, NovaPredictResponse
 
 logger = logging.getLogger(__name__)
 
-# Server-wide model context holder
 MODEL_CONTAINER: Dict[str, Any] = {}
 
 
 def _load_champion_model(
     tracking_uri: str,
-    experiment_name: str,
+    registered_model_name: str = "open_food_champion",
+    alias: str = "production",
 ) -> Tuple[Any, str]:
-    """Dynamically discover and load the top-performing finished model from MLflow.
-
-    Args:
-        tracking_uri: Local or remote MLflow tracking URI.
-        experiment_name: MLflow experiment namespace.
-
-    Returns:
-        Tuple containing loaded pyfunc MLflow model and its MLflow run ID/version.
-
-    Raises:
-        RuntimeError: If experiment or usable model artifacts cannot be resolved.
-    """
+    """Load model from MLflow Model Registry via explicit governance aliases."""
     mlflow.set_tracking_uri(tracking_uri)
-    client = mlflow.tracking.MlflowClient()
+    model_uri = f"models:/{registered_model_name}@{alias}"
 
-    experiment = client.get_experiment_by_name(experiment_name)
+    try:
+        logger.info("Loading champion model from registry alias URI: %s", model_uri)
+        loaded_model = mlflow.pyfunc.load_model(model_uri)
+        return loaded_model, alias
+    except Exception as exc:
+        logger.warning("Failed loading alias %s. Falling back to search: %s", model_uri, exc)
+
+    client = mlflow.tracking.MlflowClient()
+    experiment = client.get_experiment_by_name(settings.mlflow_experiment_name)
     if not experiment:
-        raise RuntimeError(f"MLflow experiment '{experiment_name}' does not exist.")
+        raise RuntimeError(f"MLflow experiment '{settings.mlflow_experiment_name}' not found.")
 
     runs = client.search_runs(
         experiment_ids=[experiment.experiment_id],
         filter_string="attributes.status = 'FINISHED'",
         order_by=["metrics.macro_f1 DESC"],
-        max_results=5,
+        max_results=1,
     )
 
     if not runs:
-        raise RuntimeError(
-            f"No finished runs found in MLflow experiment '{experiment_name}'."
-        )
+        raise RuntimeError("No valid finished runs discovered.")
 
-    for run in runs:
-        run_id = run.info.run_id
-        artifacts = client.list_artifacts(run_id)
-
-        model_subpath = None
-        for art in artifacts:
-            if art.is_dir:
-                dir_contents = [
-                    f.path for f in client.list_artifacts(run_id, art.path)
-                ]
-                if any("MLmodel" in path for path in dir_contents):
-                    model_subpath = art.path
-                    break
-
-        if not model_subpath:
-            if any("MLmodel" in art.path for art in artifacts):
-                model_uri = f"runs:/{run_id}"
-            else:
-                model_uri = f"runs:/{run_id}/model"
-        else:
-            model_uri = f"runs:/{run_id}/{model_subpath}"
-
-        try:
-            logger.info("Attempting to load model from MLflow URI: %s", model_uri)
-            loaded_model = mlflow.pyfunc.load_model(model_uri)
-            return loaded_model, run_id
-        except Exception as exc:
-            logger.warning("Failed loading model from URI %s: %s", model_uri, exc)
-            continue
-
-    raise RuntimeError(
-        f"Unable to load a valid MLflow model artifact from top runs in '{experiment_name}'."
-    )
+    run_id = runs[0].info.run_id
+    fallback_uri = f"runs:/{run_id}/model"
+    return mlflow.pyfunc.load_model(fallback_uri), run_id
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Manage application startup and model loading lifecycle."""
+    """Manage application startup lifecycle and champion loading."""
     logger.info("Initializing REST Serving Layer...")
     try:
-        model, run_id = _load_champion_model(
+        model, version = _load_champion_model(
             tracking_uri=settings.mlflow_tracking_uri,
-            experiment_name=settings.mlflow_experiment_name,
         )
         MODEL_CONTAINER["champion"] = model
-        MODEL_CONTAINER["model_version"] = run_id
-        logger.info("Champion model %s successfully loaded and ready for inference.", run_id)
+        MODEL_CONTAINER["model_version"] = version
+        logger.info("Champion model [%s] loaded successfully.", version)
     except Exception as exc:
         logger.error("Champion model initialization failed: %s", exc)
         MODEL_CONTAINER["champion"] = None
@@ -116,21 +81,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 app = FastAPI(
     title="Open Food MLOps Serving API",
-    version="0.2.2",
+    version="1.0.0",
     lifespan=lifespan,
 )
 
-# Register Phase 1 monitoring middleware and metrics endpoint
 setup_monitoring(app)
 
 
 @app.get("/health", status_code=status.HTTP_200_OK)
-def health_check() -> Dict[str, str]:
-    """Health check status endpoint."""
+def health_check(response: Response) -> Dict[str, Any]:
+    """Service readiness health check returning 503 if model unready."""
     is_ready = MODEL_CONTAINER.get("champion") is not None
+    if not is_ready:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return {"status": "degraded", "model_loaded": False}
     return {
-        "status": "healthy" if is_ready else "degraded",
-        "model_loaded": str(is_ready),
+        "status": "healthy",
+        "model_loaded": True,
         "model_version": MODEL_CONTAINER.get("model_version", "unknown"),
     }
 
@@ -138,7 +105,7 @@ def health_check() -> Dict[str, str]:
 def _extract_probabilities_and_pred(
     champion: Any, input_data: pd.DataFrame
 ) -> Tuple[int, float]:
-    """Extract prediction and probability safely from MLflow PyFunc or underlying flavor."""
+    """Safely extract predicted index and probability using estimator classes_."""
     candidate_estimators = []
 
     if hasattr(champion, "unwrap_python_model"):
@@ -159,31 +126,29 @@ def _extract_probabilities_and_pred(
     candidate_estimators.append(champion)
 
     for estimator in candidate_estimators:
+        classes = getattr(estimator, "classes_", None)
         if hasattr(estimator, "predict_proba"):
             try:
                 probs = estimator.predict_proba(input_data)
                 if isinstance(probs, pd.DataFrame):
                     probs = probs.to_numpy()
                 best_idx = int(np.argmax(probs[0]))
-                return best_idx, float(probs[0][best_idx])
+                pred_label = int(classes[best_idx]) if classes is not None else best_idx
+                return pred_label, float(probs[0][best_idx])
             except Exception as exc:
-                logger.debug("Failed predict_proba call on candidate %s: %s", estimator, exc)
+                logger.debug("predict_proba failed on candidate %s: %s", estimator, exc)
                 continue
 
     preds = champion.predict(input_data)
     if isinstance(preds, pd.DataFrame):
         preds = preds.to_numpy()
 
-    if isinstance(preds, np.ndarray) and preds.ndim == 2 and preds.shape[1] > 1:
-        best_idx = int(np.argmax(preds[0]))
-        return best_idx, float(preds[0][best_idx])
-
     raw_pred = int(preds[0]) if isinstance(preds, (np.ndarray, list)) else int(preds)
     return raw_pred, 1.0
 
 
 @app.post(
-    "/predict",
+    "/v1/predict",
     response_model=NovaPredictResponse,
     status_code=status.HTTP_200_OK,
 )
@@ -191,32 +156,35 @@ def predict(
     request: NovaPredictRequest,
     background_tasks: BackgroundTasks,
 ) -> NovaPredictResponse:
-    """Execute real-time NOVA group classification using loaded champion model."""
+    """Execute real-time NOVA classification following strict schema enforcement."""
     champion = MODEL_CONTAINER.get("champion")
     if champion is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Champion model is not available. Check server logs or MLflow database.",
+            detail="Model is unavailable.",
         )
 
     try:
         start_time = time.perf_counter()
-        feature_dict = request.model_dump(by_alias=True)
-        input_data = pd.DataFrame([feature_dict])
-        raw_pred, confidence = _extract_probabilities_and_pred(champion, input_data)
+        raw_dict = request.model_dump(by_alias=True)
+        product_code = raw_dict.pop("product_code", None)
+
+        input_df = pd.DataFrame([raw_dict])[FEATURE_COLUMNS].astype(float)
+        input_df = input_df.replace([np.inf, -np.inf], np.nan).fillna(0.0)
+
+        raw_pred, confidence = _extract_probabilities_and_pred(champion, input_df)
         nova_group = raw_pred + 1 if raw_pred < 4 else raw_pred
 
-        # Operational metrics instrumentation
         PREDICTION_LATENCY.observe(time.perf_counter() - start_time)
         PREDICTION_COUNTER.labels(nova_group=str(nova_group)).inc()
 
-        # Non-blocking prediction persistence to Parquet storage
         background_tasks.add_task(
             prediction_store.record_prediction,
-            features=feature_dict,
+            features=input_df.iloc[0].to_dict(),
             prediction=nova_group,
             probability=round(confidence, 4),
             model_version=MODEL_CONTAINER.get("model_version"),
+            product_code=product_code,
         )
 
         return NovaPredictResponse(
@@ -228,5 +196,5 @@ def predict(
         logger.error("Inference execution error: %s", exc, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Inference processing error: {str(exc)}",
+            detail=f"Inference error: {str(exc)}",
         ) from exc

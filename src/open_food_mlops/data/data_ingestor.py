@@ -9,6 +9,7 @@ from typing import Dict, List
 import pandas as pd
 import requests
 
+from open_food_mlops.config.features import FEATURE_COLUMNS, TARGET_COLUMN
 from open_food_mlops.config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -18,21 +19,8 @@ logger = logging.getLogger(__name__)
 class DataConfig:
     """Configuration class for Data Ingestor settings and feature selection."""
 
-    features: List[str] = field(
-        default_factory=lambda: [
-            "nova_group",
-            "added-sugars_100g",
-            "fat_100g",
-            "proteins_100g",
-            "fruits-vegetables-legumes_100g",
-            "sodium_100g",
-            "salt_100g",
-            "energy-kcal_100g",
-            "carbohydrates_100g",
-            "water_100g",
-        ]
-    )
-    target: str = "nova_group"
+    features: List[str] = field(default_factory=lambda: list(FEATURE_COLUMNS))
+    target: str = TARGET_COLUMN
     url: str = field(default_factory=lambda: settings.data_download_url)
     headers: Dict[str, str] = field(
         default_factory=lambda: {"User-Agent": settings.user_agent}
@@ -42,16 +30,18 @@ class DataConfig:
     data_dir: str = "data"
 
     def __post_init__(self) -> None:
-        """Initialize and validate directory paths."""
+        """Initialize and validate directory paths lazily."""
         self.base_path = Path(self.data_dir)
         self.raw_dir = self.base_path / "raw"
         self.processed_dir = self.base_path / "processed"
 
-        self.raw_dir.mkdir(parents=True, exist_ok=True)
-        self.processed_dir.mkdir(parents=True, exist_ok=True)
-
         if self.target not in self.features:
             self.features.append(self.target)
+
+    def prepare_directories(self) -> None:
+        """Create underlying directories on demand avoiding import side-effects."""
+        self.raw_dir.mkdir(parents=True, exist_ok=True)
+        self.processed_dir.mkdir(parents=True, exist_ok=True)
 
     @property
     def raw_file_path(self) -> Path:
@@ -75,6 +65,7 @@ class BaseDataIngestor(ABC):
 
     def __init__(self, config: DataConfig) -> None:
         self.config = config
+        self.config.prepare_directories()
 
     @abstractmethod
     def download(self) -> None:
@@ -155,7 +146,9 @@ class OpenFoodFactsDataIngestor(BaseDataIngestor):
                 lambda x: pd.to_numeric(x, errors="coerce")
             )
             cleaned = cleaned[cleaned[self.config.target].isin([1.0, 2.0, 3.0, 4.0])].copy()
-            cleaned[self.config.target] -= 1
+            
+            # Explicit integer casting post zero-indexing alignment
+            cleaned[self.config.target] = (cleaned[self.config.target] - 1).astype(int)
 
             if codes is not None:
                 cleaned["product_code"] = codes.loc[cleaned.index].astype(str)
