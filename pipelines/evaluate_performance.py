@@ -13,10 +13,25 @@ from sklearn.metrics import f1_score
 
 from open_food_mlops.config.settings import settings
 from open_food_mlops.utils.logger import setup_logging
+from serving.prediction_store import PredictionStore
 
 logger = logging.getLogger(__name__)
 
 DEGRADATION_THRESHOLD = 0.85
+
+
+def load_predictions_dataframe(predictions_path: str | Path) -> pd.DataFrame:
+    """Load predictions seamlessly from either a SQLite store or Parquet file."""
+    path = Path(predictions_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Prediction store non-existent: {path}")
+
+    if path.suffix in [".db", ".sqlite"]:
+        logger.info("Loading predictions from SQLite database: %s", path)
+        return PredictionStore(db_path=path).read_predictions_dataframe()
+
+    logger.info("Loading predictions from Parquet file: %s", path)
+    return pd.read_parquet(path)
 
 
 def push_performance_metrics(
@@ -47,10 +62,10 @@ def evaluate_production_performance(
     pred_file = Path(predictions_path)
     truth_file = Path(ground_truth_path)
 
-    if not pred_file.exists() or not truth_file.exists():
-        raise FileNotFoundError("Missing prediction store or ground truth dataset.")
+    if not truth_file.exists():
+        raise FileNotFoundError(f"Ground truth dataset missing: {truth_file}")
 
-    prod_df = pd.read_parquet(pred_file)
+    prod_df = load_predictions_dataframe(pred_file)
     truth_df = pd.read_parquet(truth_file)
 
     if "product_code" not in prod_df.columns or "product_code" not in truth_df.columns:
@@ -83,7 +98,7 @@ def evaluate_production_performance(
 
     if f1_ratio < threshold:
         logger.critical("ALERT: Performance degradation detected! Macro-F1 ratio: %.2f%%", f1_ratio * 100)
-    
+
     return prod_macro_f1
 
 

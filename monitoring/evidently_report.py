@@ -15,8 +15,23 @@ from prometheus_client import CollectorRegistry, Gauge, push_to_gateway
 from open_food_mlops.config.features import FEATURE_COLUMNS
 from open_food_mlops.config.settings import settings
 from open_food_mlops.utils.logger import setup_logging
+from serving.prediction_store import PredictionStore
 
 logger = logging.getLogger(__name__)
+
+
+def load_predictions_dataframe(predictions_path: str | Path) -> pd.DataFrame:
+    """Load predictions seamlessly from either a SQLite store or Parquet file."""
+    path = Path(predictions_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Prediction store non-existent: {path}")
+
+    if path.suffix in [".db", ".sqlite"]:
+        logger.info("Loading predictions from SQLite database: %s", path)
+        return PredictionStore(db_path=path).read_predictions_dataframe()
+
+    logger.info("Loading predictions from Parquet file: %s", path)
+    return pd.read_parquet(path)
 
 
 def push_drift_metrics(
@@ -48,14 +63,14 @@ def generate_drift_reports(
     ref_file = Path(reference_path)
     curr_file = Path(current_path)
 
-    if not ref_file.exists() or not curr_file.exists():
-        raise FileNotFoundError(f"Reference ({ref_file}) or Current ({curr_file}) data missing.")
+    if not ref_file.exists():
+        raise FileNotFoundError(f"Reference data missing: {ref_file}")
 
     ref_df = pd.read_parquet(ref_file)
-    curr_df = pd.read_parquet(curr_file)
+    curr_df = load_predictions_dataframe(curr_file)
 
     feature_cols = [col for col in FEATURE_COLUMNS if col in ref_df.columns and col in curr_df.columns]
-    
+
     drift_report = Report(metrics=[DataDriftPreset()])
     result = drift_report.run(reference_data=ref_df[feature_cols], current_data=curr_df[feature_cols])
 

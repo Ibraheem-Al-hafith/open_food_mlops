@@ -1,14 +1,17 @@
-"""Core orchestrator managing ingestion, feature engineering, model training, and selection."""
+"""Orchestrates model pipeline execution, single-pass refit, packaging, and MLflow promotion."""
 
 from __future__ import annotations
 
 import logging
-import tempfile
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
+import joblib
 import pandas as pd
+
 from open_food_mlops.config.schemas import ExperimentPlan
+from open_food_mlops.config.settings import settings
 from open_food_mlops.data.splitting import (
     DataSplitConfig,
     DatasetSplits,
@@ -23,16 +26,26 @@ from open_food_mlops.experiments.selection import (
     SelectionResult,
 )
 from open_food_mlops.features.builder import get_feature_pipeline
-import open_food_mlops.models.implementations  # Register models
+import open_food_mlops.models.implementations  # Register implementations
 from open_food_mlops.models.registry import get_model_class
 from open_food_mlops.models.tuning.optuna_tuner import OptunaTuner
+from open_food_mlops.models.wrapper import NovaPipelineWrapper
 from open_food_mlops.tracking.mlflow_tracker import MLflowTracker
 
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class TrainedCandidate:
+    """Internal container holding metadata and fitted artifacts for a candidate model."""
+
+    result: CandidateResult
+    fitted_pipeline: Any
+    fitted_model: Any
+
+
 class ExperimentOrchestrator:
-    """Coordinates end-to-end execution of MLOps pipelines."""
+    """Orchestrates cross-validation, hyperparameter tuning, final refit, and champion promotion."""
 
     def __init__(self, plan: ExperimentPlan) -> None:
         self.plan = plan
@@ -48,7 +61,7 @@ class ExperimentOrchestrator:
         )
 
     def run(self) -> SelectionResult:
-        """Execute experiment flow across all enabled models."""
+        """Execute experiment workflow and promote champion without duplicate computation."""
         df = self._load_data(self.plan.data.data_path)
 
         split_config = DataSplitConfig(
@@ -70,7 +83,7 @@ class ExperimentOrchestrator:
             config=split_config,
         )
 
-        candidates: list[CandidateResult] = []
+        trained_candidates: list[TrainedCandidate] = []
         for model_cfg in self.plan.models:
             if not model_cfg.enabled:
                 logger.info("Skipping disabled model: %s", model_cfg.name)
@@ -78,25 +91,34 @@ class ExperimentOrchestrator:
 
             try:
                 candidate = self._run_model_pipeline(model_cfg, dataset)
-                candidates.append(candidate)
+                trained_candidates.append(candidate)
             except Exception as err:
                 logger.error("Failed executing model %s: %s", model_cfg.name, err, exc_info=True)
 
-        return self.selection_engine.select_champion(candidates)
+        candidate_results = [tc.result for tc in trained_candidates]
+        selection_result = self.selection_engine.select_champion(candidate_results)
+
+        if selection_result.champion:
+            winning_candidate = next(
+                tc for tc in trained_candidates if tc.result.candidate_id == selection_result.champion.candidate_id
+            )
+            self._promote_champion(winning_candidate)
+
+        return selection_result
 
     def _load_data(self, path: str) -> pd.DataFrame:
-        if path.endswith(".parquet"):
-            return pd.read_parquet(path)
-        return pd.read_csv(path)
+        target_path = Path(path)
+        if not target_path.is_absolute():
+            target_path = settings.base_dir / target_path
+        return pd.read_parquet(target_path) if target_path.suffix == ".parquet" else pd.read_csv(target_path)
 
     def _run_model_pipeline(
         self, model_cfg: Any, dataset: DatasetSplits
-    ) -> CandidateResult:
+    ) -> TrainedCandidate:
         with self.tracker.start_run(run_name=f"{model_cfg.name}_run"):
             model_cls = get_model_class(model_cfg.name)
             best_params = model_cfg.params.copy()
 
-            # Hyperparameter Optimization
             if model_cfg.tuning.enabled:
                 def objective(sampled_params: dict[str, Any]) -> float:
                     scores = []
@@ -122,7 +144,6 @@ class ExperimentOrchestrator:
                 )
                 best_params.update(tuner.optimize(objective).best_params)
 
-            # Cross Validation
             fold_metrics: list[dict[str, float]] = []
             for split in dataset.splits:
                 pipe = get_feature_pipeline()
@@ -140,29 +161,58 @@ class ExperimentOrchestrator:
                 for k in fold_metrics[0]
             }
 
-            """Surgical update to Experiment Orchestrator to trigger model registration during run completion."""
             self.tracker.log_params(best_params)
             self.tracker.log_metrics(avg_metrics)
 
-            # --- MODEL REGISTRATION ADDITION ---
-            # Register the trained model directly into MLflow Registry
-            registered_name = f"open_food_{model_cfg.name}"
-            self.tracker.register_model(
-                model=model,
-                artifact_path="model",
-                registered_model_name=registered_name,
+            # Refit once on full training split
+            logger.info("Refitting %s on full training dataset...", model_cfg.name)
+            final_pipeline = get_feature_pipeline()
+            X_train_full = final_pipeline.fit_transform(dataset.X_train)
+            final_model = model_cls(best_params)
+            final_model.fit(X_train_full, dataset.y_train)
+
+            # Persist local artifacts using settings.base_dir
+            artifacts_dir = settings.base_dir / "data" / "artifacts" / model_cfg.name
+            artifacts_dir.mkdir(parents=True, exist_ok=True)
+
+            final_model.save(artifacts_dir)
+            joblib.dump(final_pipeline, artifacts_dir / "feature_pipeline.joblib")
+            self.tracker.log_artifact(str(artifacts_dir))
+
+            candidate_res = CandidateResult(
+                candidate_id=f"candidate_{model_cfg.name}",
+                model_name=model_cfg.name,
+                metrics=avg_metrics,
+                params=best_params,
+                artifact_path=str(artifacts_dir),
             )
-            # ------------------------------------
 
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                artifact_dir = Path(tmp_dir) / model_cfg.name
-                model.save(artifact_dir)
-                self.tracker.log_artifact(str(artifact_dir))
+            return TrainedCandidate(
+                result=candidate_res,
+                fitted_pipeline=final_pipeline,
+                fitted_model=final_model,
+            )
 
-                return CandidateResult(
-                    candidate_id=f"candidate_{model_cfg.name}",
-                    model_name=model_cfg.name,
-                    metrics=avg_metrics,
-                    params=best_params,
-                    artifact_path=str(artifact_dir),
-                )
+    def _promote_champion(self, champion_candidate: TrainedCandidate) -> None:
+        """Bundle pipeline and champion model into MLflow PyFunc and set production alias."""
+        logger.info(
+            "Promoting champion model '%s' to MLflow Model Registry...",
+            champion_candidate.result.model_name,
+        )
+
+        wrapper = NovaPipelineWrapper(
+            pipeline=champion_candidate.fitted_pipeline,
+            model=champion_candidate.fitted_model,
+        )
+
+        with self.tracker.start_run(run_name="champion_promotion"):
+            self.tracker.log_params(champion_candidate.result.params)
+            self.tracker.log_metrics(champion_candidate.result.metrics)
+
+            self.tracker.register_and_alias_pyfunc(
+                pyfunc_model=wrapper,
+                artifact_path="model",
+                registered_model_name="open_food_champion",
+                alias="production",
+            )
+            logger.info("Champion bundled model successfully registered and aliased as 'open_food_champion@production'.")
