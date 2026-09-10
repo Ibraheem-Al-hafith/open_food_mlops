@@ -11,7 +11,7 @@ class NovaPredictRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     product_code: Optional[str] = Field(
-        None, description="Unique product barcode identifier for operational tracking"
+        None, alias="product_code", description="Unique product barcode identifier for operational tracking"
     )
     added_sugars_100g: float = Field(..., alias="added-sugars_100g", ge=0.0)
     fat_100g: float = Field(..., ge=0.0)

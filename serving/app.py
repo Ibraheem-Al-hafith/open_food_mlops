@@ -167,11 +167,10 @@ def predict(
     try:
         start_time = time.perf_counter()
         raw_dict = request.model_dump(by_alias=True)
-        product_code = raw_dict.pop("product_code", None)
+        product_code = raw_dict.get("product_code", None)
 
         input_df = pd.DataFrame([raw_dict])[FEATURE_COLUMNS].astype(float)
-        input_df = input_df.replace([np.inf, -np.inf], np.nan).fillna(0.0)
-
+        
         raw_pred, confidence = _extract_probabilities_and_pred(champion, input_df)
         nova_group = raw_pred + 1 if raw_pred < 4 else raw_pred
 
