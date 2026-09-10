@@ -66,10 +66,17 @@ class ModelSelectionEngine:
                 champion=None, passed_candidates=[], rejected_candidates=rejected
             )
 
+        for candidate in passed:
+            if self.primary_metric not in candidate.metrics:
+                raise ValueError(
+                    f"Candidate '{candidate.candidate_id}' is missing "
+                    f"primary metric '{self.primary_metric}'."
+                )
+        
         reverse_sort = self.direction == "maximize"
         sorted_candidates = sorted(
             passed,
-            key=lambda c: c.metrics.get(self.primary_metric, 0.0),
+            key=lambda c: c.metrics[self.primary_metric],
             reverse=reverse_sort,
         )
 
@@ -77,7 +84,7 @@ class ModelSelectionEngine:
             "Champion selected: %s with %s=%s",
             sorted_candidates[0].model_name,
             self.primary_metric,
-            sorted_candidates[0].metrics.get(self.primary_metric, 0.0),
+            sorted_candidates[0].metrics[self.primary_metric],
         )
         return SelectionResult(
             champion=sorted_candidates[0],
@@ -87,6 +94,13 @@ class ModelSelectionEngine:
 
     def _passes_gates(self, metrics: dict[str, float]) -> bool:
         for metric, min_threshold in self.gates.items():
-            if metrics.get(metric, 0.0) < min_threshold:
+            if metric not in metrics:
+                logger.error(
+                    "Candidate is missing required quality-gate metric '%s'.",
+                    metric,
+                )
+                return False
+
+            if metrics[metric] < min_threshold:
                 return False
         return True

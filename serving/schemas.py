@@ -40,7 +40,26 @@ class NovaPredictRequest(BaseModel):
 class NovaPredictResponse(BaseModel):
     """Schema for NOVA score prediction output."""
 
-    nova_group: int = Field(..., description="Predicted NOVA group (1 to 4)")
-    probability: float = Field(
-        ..., description="Confidence probability for the predicted class"
+    model_config = ConfigDict(extra="forbid")
+
+    nova_group: int = Field(
+        ...,
+        ge=1,
+        le=4,
+        description="Predicted NOVA group (1 to 4)",
     )
+
+    probability: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Confidence probability for the predicted class",
+    )
+
+    @field_validator("probability", mode="before")
+    @classmethod
+    def validate_probability(cls, value: float) -> float:
+        """Reject non-finite probability values."""
+        if isinstance(value, (int, float)) and not math.isfinite(value):
+            raise ValueError("Probability must be a finite numeric value.")
+        return value

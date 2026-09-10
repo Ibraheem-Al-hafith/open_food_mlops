@@ -1,7 +1,7 @@
 """Centralized application settings loaded dynamically from environment variables or .env."""
 
 from pathlib import Path
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -81,6 +81,42 @@ class Settings(BaseSettings):
     reports_dir: Path = Field(
         default=Path("data/monitoring/reports")
     )
+    
+    @model_validator(mode="after")
+    def resolve_absolute_paths(self) -> "Settings":
+        # Ensure base_dir is fully resolved and absolute
+        object.__setattr__(self, "base_dir", self.base_dir.resolve())
+
+        path_fields = (
+            "log_config_path",
+            "predictions_path",
+            "ground_truth_path",
+            "reference_data_path",
+            "reference_predictions_path",
+            "reports_dir",
+        )
+
+        for field_name in path_fields:
+            current_path: Path = getattr(self, field_name)
+            if not current_path.is_absolute():
+                # Use object.__setattr__ to bypass frozen/validation state cleanly
+                object.__setattr__(self, field_name, (self.base_dir / current_path).resolve())
+
+        return self
+    @model_validator(mode="after")
+    def validate_production_settings(self):
+        if self.app_env == "production":
+            if "localhost" in self.mlflow_tracking_uri or "127.0.0.1" in self.mlflow_tracking_uri:
+                raise ValueError(
+                    "MLFLOW_TRACKING_URI cannot point to localhost in production."
+                )
+
+            if "localhost" in self.pushgateway_url or "127.0.0.1" in self.pushgateway_url:
+                raise ValueError(
+                    "PUSHGATEWAY_URL cannot point to localhost in production."
+                )
+
+        return self
 
 
 settings = Settings()

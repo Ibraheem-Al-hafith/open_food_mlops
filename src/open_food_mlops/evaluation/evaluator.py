@@ -21,8 +21,14 @@ class EvaluationResult:
 
     @property
     def primary_score(self) -> float:
-        """Extract primary metric score."""
-        return self.metrics.get(self.primary_metric_name, 0.0)
+        """Extract the configured primary metric score."""
+        try:
+            return self.metrics[self.primary_metric_name]
+        except KeyError as exc:
+            raise ValueError(
+                f"Primary metric '{self.primary_metric_name}' "
+                "is missing from evaluation metrics."
+            ) from exc
 
 
 class Evaluator:

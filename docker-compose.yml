@@ -14,8 +14,22 @@ services:
     volumes:
       - ./data/production:/app/data/production
     depends_on:
-      - mlflow
-      - pushgateway
+      mlflow:
+        condition: service_healthy
+      pushgateway:
+        condition: service_started
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   mlflow:
     build:
@@ -26,6 +40,18 @@ services:
     volumes:
       - ./mlflow/mlflow.db:/mlflow/mlflow.db
       - ./mlflow/mlruns:/mlflow/mlruns
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   prometheus:
     image: prom/prometheus:v2.45.0
@@ -35,8 +61,10 @@ services:
     volumes:
       - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml
     depends_on:
-      - fastapi
-      - pushgateway
+      fastapi:
+        condition: service_healthy
+      pushgateway:
+        condition: service_started
 
   pushgateway:
     image: prom/pushgateway:latest

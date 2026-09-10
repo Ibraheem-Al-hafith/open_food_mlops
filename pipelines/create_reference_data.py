@@ -10,14 +10,15 @@ import pandas as pd
 
 from open_food_mlops.utils.logger import setup_logging
 from open_food_mlops.config.features import FEATURE_COLUMNS
+from open_food_mlops.config.settings import settings
 
 
 logger = logging.getLogger(__name__)
 
 
 def generate_reference_dataset(
-    processed_data_path: str = "data/processed/processed_data.parquet",
-    output_reference_path: str = "data/monitoring/reference.parquet",
+    processed_data_path: str = str(settings.ground_truth_path),
+    output_reference_path: str = str(settings.reference_data_path),
 ) -> None:
     """Extract canonical feature schema from training/processed dataset and save to reference store.
 
@@ -55,13 +56,14 @@ def main() -> None:
     parser.add_argument(
         "--processed-path",
         type=str,
-        default="data/processed/processed_data.parquet",
+        default=str(settings.ground_truth_path),
         help="Path to processed training dataset.",
     )
+
     parser.add_argument(
         "--output-path",
         type=str,
-        default="data/monitoring/reference.parquet",
+        default=str(settings.reference_data_path),
         help="Target path for reference parquet file.",
     )
     args = parser.parse_args()

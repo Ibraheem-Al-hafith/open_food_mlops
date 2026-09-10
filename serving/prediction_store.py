@@ -68,7 +68,12 @@ class PredictionStore:
         sanitized_features = {k: v for k, v in features.items() if k != "product_code"}
         ts_str = datetime.now(timezone.utc).isoformat()
         p_code = product_code or "unknown"
-        m_version = model_version or "unknown"
+        if not model_version:
+            raise ValueError(
+                "model_version is required when recording a prediction."
+            )
+
+        m_version = model_version
         features_json = json.dumps(sanitized_features)
 
         with self._lock, sqlite3.connect(self.db_path) as conn:
@@ -83,7 +88,12 @@ class PredictionStore:
                 )
                 conn.commit()
             except Exception as exc:
-                logger.error("Failed persisting prediction record: %s", exc, exc_info=True)
+                logger.error(
+                    "Failed persisting prediction record: %s",
+                    exc,
+                    exc_info=True,
+                )
+                raise
 
     def read_predictions_dataframe(self) -> pd.DataFrame:
         """Read all recorded predictions into a pandas DataFrame."""

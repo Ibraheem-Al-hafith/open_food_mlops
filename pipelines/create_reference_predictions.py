@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 
@@ -12,8 +10,8 @@ from open_food_mlops.config.features import FEATURE_COLUMNS
 
 
 
-REFERENCE_PATH = Path("data/monitoring/reference.parquet")
-OUTPUT_PATH = Path("data/monitoring/reference_predictions.parquet")
+REFERENCE_PATH = settings.reference_data_path
+OUTPUT_PATH = settings.reference_predictions_path
 
 SAMPLE_SIZE = 10_000
 RANDOM_STATE = 42

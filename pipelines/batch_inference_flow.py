@@ -173,7 +173,7 @@ def main() -> None:
     parser.add_argument(
         "--data-path",
         type=str,
-        default="data/processed/processed_data.parquet",
+        default=str(settings.ground_truth_path),
         help="Path to feature dataset for batch prediction.",
     )
     parser.add_argument(
