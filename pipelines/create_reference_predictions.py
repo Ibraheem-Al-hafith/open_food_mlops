@@ -5,10 +5,11 @@ import pandas as pd
 
 from open_food_mlops.config.settings import settings
 from pipelines.batch_inference_flow import (
-    FEATURES,
     extract_batch_predictions,
     load_champion_model,
 )
+from open_food_mlops.config.features import FEATURE_COLUMNS
+
 
 
 REFERENCE_PATH = Path("data/monitoring/reference.parquet")
@@ -27,7 +28,7 @@ def main() -> None:
 
     missing_features = [
         feature
-        for feature in FEATURES
+        for feature in FEATURE_COLUMNS
         if feature not in reference_df.columns
     ]
 
@@ -44,7 +45,7 @@ def main() -> None:
             random_state=RANDOM_STATE,
         )
 
-    feature_df = reference_df[FEATURES]
+    feature_df = reference_df[FEATURE_COLUMNS]
 
     print(f"Rows selected for reference predictions: {len(feature_df):,}")
 

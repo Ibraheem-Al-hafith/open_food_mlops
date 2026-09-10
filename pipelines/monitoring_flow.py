@@ -9,6 +9,7 @@ from prefect.tasks import task_input_hash
 from pipelines.evaluate_performance import evaluate_production_performance
 from monitoring.evidently_report import generate_drift_reports # Adjust if your function is named generate_drift_report
 from pipelines.prediction_drift import generate_prediction_drift_report
+from open_food_mlops.utils.logger import setup_logging
 
 logger = logging.getLogger(__name__)
 
@@ -68,4 +69,5 @@ def monitoring_pipeline():
 
 if __name__ == "__main__":
     # Running this file directly will execute the flow locally
+    setup_logging()
     monitoring_pipeline()

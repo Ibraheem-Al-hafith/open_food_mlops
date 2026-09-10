@@ -8,12 +8,12 @@ from pathlib import Path
 
 import pandas as pd
 
-from open_food_mlops.data.data_ingestor import DataConfig
 from open_food_mlops.utils.logger import setup_logging
+from open_food_mlops.config.features import FEATURE_COLUMNS
+
 
 logger = logging.getLogger(__name__)
-data_config = DataConfig()
-FEATURES = [f for f in data_config.features if f != data_config.target]
+
 
 def generate_reference_dataset(
     processed_data_path: str = "data/processed/processed_data.parquet",
@@ -35,11 +35,11 @@ def generate_reference_dataset(
     else:
         df = pd.read_csv(processed_data_path)
 
-    missing = [f for f in FEATURES if f not in df.columns]
+    missing = [f for f in FEATURE_COLUMNS if f not in df.columns]
     if missing:
         raise ValueError(f"Processed dataset missing canonical features: {missing}")
 
-    reference_df = df[FEATURES].copy()
+    reference_df = df[FEATURE_COLUMNS].copy()
 
     output_path = Path(output_reference_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)

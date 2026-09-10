@@ -1,5 +1,4 @@
 """Orchestrates model pipeline execution, single-pass refit, packaging, and MLflow promotion."""
-
 from __future__ import annotations
 
 import logging
@@ -10,6 +9,7 @@ from typing import Any, Optional
 import joblib
 import pandas as pd
 
+from open_food_mlops.config.features import FEATURE_COLUMNS
 from open_food_mlops.config.schemas import ExperimentPlan
 from open_food_mlops.config.settings import settings
 from open_food_mlops.data.splitting import (
@@ -38,7 +38,6 @@ logger = logging.getLogger(__name__)
 @dataclass
 class TrainedCandidate:
     """Internal container holding metadata and fitted artifacts for a candidate model."""
-
     result: CandidateResult
     fitted_pipeline: Any
     fitted_model: Any
@@ -63,7 +62,7 @@ class ExperimentOrchestrator:
     def run(self) -> SelectionResult:
         """Execute experiment workflow and promote champion without duplicate computation."""
         df = self._load_data(self.plan.data.data_path)
-
+        
         split_config = DataSplitConfig(
             sample_fraction=self.plan.data.sample_fraction,
             test=TestConfig(
@@ -76,7 +75,7 @@ class ExperimentOrchestrator:
                 random_state=self.plan.data.random_state,
             ),
         )
-
+        
         dataset = DatasetSplits.from_dataframe(
             dataframe=df,
             target=self.plan.data.target_column,
@@ -110,7 +109,12 @@ class ExperimentOrchestrator:
         target_path = Path(path)
         if not target_path.is_absolute():
             target_path = settings.base_dir / target_path
-        return pd.read_parquet(target_path) if target_path.suffix == ".parquet" else pd.read_csv(target_path)
+            
+        df = pd.read_parquet(target_path) if target_path.suffix == ".parquet" else pd.read_csv(target_path)
+        
+        # Prevent metadata leakage (e.g., product_code) from entering the feature space
+        valid_columns = [c for c in [self.plan.data.target_column, *FEATURE_COLUMNS] if c in df.columns]
+        return df[valid_columns]
 
     def _run_model_pipeline(
         self, model_cfg: Any, dataset: DatasetSplits
@@ -126,7 +130,6 @@ class ExperimentOrchestrator:
                         pipe = get_feature_pipeline()
                         X_tr = pipe.fit_transform(split.X_train)
                         X_va = pipe.transform(split.X_validation)
-
                         m = model_cls({**model_cfg.params, **sampled_params})
                         m.fit(X_tr, split.y_train)
                         preds = m.predict(X_va)
@@ -149,11 +152,9 @@ class ExperimentOrchestrator:
                 pipe = get_feature_pipeline()
                 X_tr = pipe.fit_transform(split.X_train)
                 X_va = pipe.transform(split.X_validation)
-
                 model = model_cls(best_params)
                 model.fit(X_tr, split.y_train)
                 preds = model.predict(X_va)
-
                 fold_metrics.append(self.evaluator.evaluate(split.y_validation, preds).metrics)
 
             avg_metrics = {
@@ -174,7 +175,6 @@ class ExperimentOrchestrator:
             # Persist local artifacts using settings.base_dir
             artifacts_dir = settings.base_dir / "data" / "artifacts" / model_cfg.name
             artifacts_dir.mkdir(parents=True, exist_ok=True)
-
             final_model.save(artifacts_dir)
             joblib.dump(final_pipeline, artifacts_dir / "feature_pipeline.joblib")
             self.tracker.log_artifact(str(artifacts_dir))
@@ -199,7 +199,6 @@ class ExperimentOrchestrator:
             "Promoting champion model '%s' to MLflow Model Registry...",
             champion_candidate.result.model_name,
         )
-
         wrapper = NovaPipelineWrapper(
             pipeline=champion_candidate.fitted_pipeline,
             model=champion_candidate.fitted_model,
@@ -208,7 +207,6 @@ class ExperimentOrchestrator:
         with self.tracker.start_run(run_name="champion_promotion"):
             self.tracker.log_params(champion_candidate.result.params)
             self.tracker.log_metrics(champion_candidate.result.metrics)
-
             self.tracker.register_and_alias_pyfunc(
                 pyfunc_model=wrapper,
                 artifact_path="model",

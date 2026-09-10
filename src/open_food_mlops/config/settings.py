@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     )
 
     predictions_path: Path = Field(
-        default_factory=lambda: Path("data/production/predictions.parquet")
+        default_factory=lambda: Path("data/production/predictions.db")
     )
     ground_truth_path: Path = Field(
         default_factory=lambda: Path("data/processed/processed_data.parquet")
