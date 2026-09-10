@@ -1,37 +1,54 @@
 services:
 
+  fastapi:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.fastapi
+    ports:
+      - "1601:8000"
+    env_file:
+      - .env
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      PUSHGATEWAY_URL: http://pushgateway:9091
+    volumes:
+      - ./data/production:/app/data/production
+    depends_on:
+      - mlflow
+      - pushgateway
+
   mlflow:
     build:
       context: .
       dockerfile: docker/Dockerfile.mlflow
-
     ports:
-      - "5000:5000"
-
+      - "1602:5000"
     volumes:
       - ./mlflow/mlflow.db:/mlflow/mlflow.db
       - ./mlflow/mlruns:/mlflow/mlruns
-  
+
   prometheus:
     image: prom/prometheus:v2.45.0
     container_name: prometheus
     ports:
-      - "9090:9090"
+      - "1603:9090"
     volumes:
       - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    depends_on:
+      - fastapi
+      - pushgateway
+
   pushgateway:
     image: prom/pushgateway:latest
     container_name: pushgateway
     ports:
-      - "9091:9091"
+      - "1604:9091"
 
   grafana:
     image: grafana/grafana:latest
     container_name: grafana
     ports:
-      - "3000:3000"
+      - "1605:3000"
     volumes:
       - grafana_data:/var/lib/grafana
     depends_on:

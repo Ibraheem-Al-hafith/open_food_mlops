@@ -109,11 +109,15 @@ def extract_batch_predictions(
 
 def run_batch_inference(
     data_path: str,
-    output_store_path: str = "data/production/predictions.db",
+    output_store_path: str | Path | None = None,
     sample_size: int | None = None,
 ) -> None:
     """Read dataset, sanitize features, execute batch inference, and persist results."""
     logger.info("Starting batch inference pipeline...")
+
+    if output_store_path is None:
+        output_store_path = settings.predictions_path
+
     input_file = Path(data_path)
     if not input_file.exists():
         raise FileNotFoundError(f"Input batch data path not found: {data_path}")
@@ -175,8 +179,8 @@ def main() -> None:
     parser.add_argument(
         "--output-path",
         type=str,
-        default="data/production/predictions.db",
-        help="Target SQLite prediction database path.",
+        default=None,
+        help="Optional override for the SQLite prediction database path.",
     )
     parser.add_argument(
         "--sample-size",

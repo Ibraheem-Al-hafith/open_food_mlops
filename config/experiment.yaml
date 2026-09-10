@@ -74,5 +74,4 @@ selection:
 
 tracking:
   backend: mlflow
-  tracking_uri: http://localhost:5000
   experiment_name: fixing-product-bug

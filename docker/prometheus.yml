@@ -5,10 +5,9 @@ scrape_configs:
   - job_name: "open_food_mlops_serving"
     metrics_path: "/metrics"
     static_configs:
-      - targets: ["host.docker.internal:8000"]
+      - targets: ["fastapi:8000"]
 
   - job_name: "pushgateway"
-    # honor_labels is CRITICAL for pushgateway so it doesn't overwrite the job/instance labels
     honor_labels: true
     static_configs:
       - targets: ["pushgateway:9091"]

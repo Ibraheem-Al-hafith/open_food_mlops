@@ -49,7 +49,7 @@ class ExperimentOrchestrator:
     def __init__(self, plan: ExperimentPlan) -> None:
         self.plan = plan
         self.tracker = MLflowTracker(
-            tracking_uri=plan.tracking.tracking_uri,
+            tracking_uri=settings.mlflow_tracking_uri,
             experiment_name=plan.tracking.experiment_name,
         )
         self.evaluator = Evaluator(primary_metric=plan.selection.primary_metric)

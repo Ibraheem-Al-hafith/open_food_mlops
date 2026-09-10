@@ -69,7 +69,6 @@ class TrackingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     backend: str = "mlflow"
-    tracking_uri: str = "sqlite:///mlflow.db"
     experiment_name: str = "open-food-mlops-v2"
 
 
