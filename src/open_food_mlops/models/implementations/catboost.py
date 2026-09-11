@@ -1,4 +1,4 @@
-"""XGBoost model implementation compatible with XGBoost >= 3.4.0."""
+"""CatBoost model implementation compatible with CatBoost >= 1.2.10."""
 
 from __future__ import annotations
 
@@ -10,14 +10,13 @@ import joblib
 import pandas as pd
 
 try:
-    import xgboost as xgb
+    import catboost as cb
 except ImportError:
-    xgb = None  # type: ignore[assignment]
+    cb = None  # type: ignore[assignment]
 
 from ..base import BaseModel
 from ..registry import register
 from ..specs import (
-    CategoricalParameter,
     FloatParameter,
     IntParameter,
     SearchSpace,
@@ -26,43 +25,41 @@ from ..specs import (
 logger = logging.getLogger(__name__)
 
 
-@register("xgboost")
-class XGBoostModel(BaseModel):
-    """XGBoost Classifier adapter satisfying the BaseModel interface."""
+@register("catboost")
+class CatBoostModel(BaseModel):
+    """CatBoost Classifier adapter satisfying the BaseModel interface."""
 
-    model_name = "xgboost"
+    model_name = "catboost"
 
     def __init__(self, config: Mapping[str, Any] | None = None) -> None:
-        if xgb is None:
+        if cb is None:
             raise ImportError(
-                "XGBoost is not installed. Please install it via `pip install xgboost`."
+                "CatBoost is not installed. Please install it via `pip install catboost`."
             )
         super().__init__(config)
 
     @classmethod
     def get_default_params(cls) -> Mapping[str, Any]:
-        """Return default XGBoost parameters."""
+        """Return default CatBoost parameters."""
         return {
-            "n_estimators": 100,
-            "learning_rate": 0.1,
-            "max_depth": 6,
-            "subsample": 0.8,
-            "colsample_bytree": 0.8,
-            "random_state": 42,
-            "n_jobs": -1,
-            "eval_metric": "mlogloss",
+            "iterations": 200,
+            "learning_rate": 0.08,
+            "depth": 6,
+            "random_seed": 42,
+            "verbose": 0,
+            "loss_function": "MultiClass",
         }
 
     def fit(self, X: pd.DataFrame, y: pd.Series) -> Self:
-        """Fit the XGBoost classifier."""
+        """Fit the CatBoost classifier."""
         params = {**self.get_default_params(), **self.config}
-        assert xgb is not None
+        assert cb is not None
         
         num_classes = len(y.unique())
-        if num_classes > 2 and "objective" not in params:
-            params["objective"] = "multi:softprob"
+        if num_classes == 2:
+            params["loss_function"] = "Logloss"
 
-        self.estimator_ = xgb.XGBClassifier(**params)
+        self.estimator_ = cb.CatBoostClassifier(**params)
         self.estimator_.fit(X, y)
         self.is_fitted_ = True
         return self
@@ -72,6 +69,11 @@ class XGBoostModel(BaseModel):
         self._check_is_fitted()
         assert self.estimator_ is not None
         predictions = self.estimator_.predict(X)
+        
+        # Flatten predictions array if multi-dimensional
+        if hasattr(predictions, "ndim") and predictions.ndim > 1:
+            predictions = predictions.ravel()
+            
         return pd.Series(
             predictions,
             index=X.index,
@@ -92,19 +94,16 @@ class XGBoostModel(BaseModel):
 
     @classmethod
     def get_search_space(cls) -> SearchSpace:
-        """Return hyperparameter search space for XGBoost >= 3.4.0."""
+        """Return hyperparameter search space for CatBoost."""
         return {
-            "n_estimators": IntParameter(low=50, high=1000, step=50),
-            "max_depth": IntParameter(low=3, high=12),
-            "learning_rate": FloatParameter(low=0.005, high=0.3, log=True),
-            "subsample": FloatParameter(low=0.5, high=1.0),
-            "colsample_bytree": FloatParameter(low=0.5, high=1.0),
-            "min_child_weight": IntParameter(low=1, high=10),
-            "gamma": FloatParameter(low=0.0, high=5.0),
+            "iterations": IntParameter(low=100, high=1000, step=50),
+            "depth": IntParameter(low=4, high=10),
+            "learning_rate": FloatParameter(low=0.01, high=0.3, log=True),
+            "l2_leaf_reg": FloatParameter(low=1.0, high=10.0),
         }
 
     def _save(self, path: Path) -> None:
-        """Serialize the fitted XGBoost estimator."""
+        """Serialize the fitted CatBoost estimator."""
         joblib.dump(
             {
                 "config": self.config,
@@ -115,7 +114,7 @@ class XGBoostModel(BaseModel):
 
     @classmethod
     def _load(cls, path: Path) -> Self:
-        """Restore serialized XGBoost model."""
+        """Restore serialized CatBoost model."""
         payload = joblib.load(path / "model.joblib")
         model = cls(payload["config"])
         model.estimator_ = payload["estimator"]

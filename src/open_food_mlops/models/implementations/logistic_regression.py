@@ -1,4 +1,4 @@
-"""Logistic Regression model implementation."""
+"""Logistic Regression model implementation compatible with Scikit-Learn >= 1.9.0."""
 
 from __future__ import annotations
 
@@ -40,30 +40,25 @@ class LogisticRegressionModel(BaseModel):
         }
 
     def fit(self, X: pd.DataFrame, y: pd.Series) -> Self:
-        """Fit the Logistic Regression classifier.
-
-        Args:
-            X: Training feature matrix.
-            y: Training targets.
-
-        Returns:
-            The fitted model instance.
-        """
+        """Fit the Logistic Regression classifier."""
         params = {**self.get_default_params(), **self.config}
+        
+        # Guard against incompatible solver/penalty combinations in scikit-learn >= 1.4+
+        solver = params.get("solver", "lbfgs")
+        penalty = params.get("penalty", "l2")
+        
+        if penalty == "l1" and solver not in ("saga", "liblinear"):
+            params["solver"] = "saga"
+        elif penalty is None or penalty == "none":
+            params["penalty"] = None
+
         self.estimator_ = LogisticRegression(**params)
         self.estimator_.fit(X, y)
         self.is_fitted_ = True
         return self
 
     def predict(self, X: pd.DataFrame) -> pd.Series:
-        """Generate class predictions.
-
-        Args:
-            X: Input feature matrix.
-
-        Returns:
-            pd.Series containing class predictions.
-        """
+        """Generate class predictions."""
         self._check_is_fitted()
         assert self.estimator_ is not None
         predictions = self.estimator_.predict(X)
@@ -74,14 +69,7 @@ class LogisticRegressionModel(BaseModel):
         )
 
     def predict_proba(self, X: pd.DataFrame) -> pd.DataFrame:
-        """Generate class probabilities.
-
-        Args:
-            X: Input feature matrix.
-
-        Returns:
-            pd.DataFrame with columns for each class probability.
-        """
+        """Generate class probabilities."""
         self._check_is_fitted()
         assert self.estimator_ is not None
         probabilities = self.estimator_.predict_proba(X)
@@ -94,11 +82,15 @@ class LogisticRegressionModel(BaseModel):
 
     @classmethod
     def get_search_space(cls) -> SearchSpace:
-        """Return hyperparameter search space for Logistic Regression."""
+        """Return hyperparameter search space for Logistic Regression.
+        
+        Restricts solvers to 'saga' to cleanly support both L1 and L2 penalties
+        during Optuna optimization trials without runtime parameter collisions.
+        """
         return {
             "C": FloatParameter(low=1e-4, high=100.0, log=True),
             "penalty": CategoricalParameter(choices=("l1", "l2")),
-            "solver": CategoricalParameter(choices=("saga", "liblinear", "lbfgs")),
+            "solver": CategoricalParameter(choices=("saga",)),
         }
 
     def _save(self, path: Path) -> None:
