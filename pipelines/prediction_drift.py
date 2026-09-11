@@ -117,35 +117,39 @@ def generate_prediction_drift_report(
 
     report_dict = result.dict()
 
-    dataset_drift_metric = next(
+    prediction_drift_metric = next(
         (
             metric
             for metric in report_dict.get("metrics", [])
-            if metric.get("metric") == "DatasetDriftMetric"
+            if metric.get("metric_name", "").startswith(
+                f"ValueDrift(column={PREDICTION_COLUMN},"
+            )
         ),
         None,
     )
-    if dataset_drift_metric is None:
-        raise RuntimeError("Evidently report did not contain DatasetDriftMetric.")
 
-    metric_result = dataset_drift_metric.get("result")
-    if not isinstance(metric_result, dict):
+    if prediction_drift_metric is None:
         raise RuntimeError(
-            "Evidently DatasetDriftMetric result is missing or malformed."
+            f"Evidently report did not contain ValueDrift for "
+            f"'{PREDICTION_COLUMN}'."
         )
 
-    if "dataset_drift" not in metric_result:
+    if "value" not in prediction_drift_metric:
         raise RuntimeError(
-            "Evidently DatasetDriftMetric result is missing 'dataset_drift'."
+            "Evidently ValueDrift metric is missing its 'value'."
         )
 
-    if "share_of_drifted_columns" not in metric_result:
-        raise RuntimeError(
-            "Evidently DatasetDriftMetric result is missing 'share_of_drifted_columns'."
+    prediction_drift_distance = float(prediction_drift_metric["value"])
+
+    if not 0.0 <= prediction_drift_distance <= 1.0:
+        raise ValueError(
+            f"Invalid prediction drift distance: {prediction_drift_distance}. "
+            "Expected a value between 0 and 1."
         )
 
-    is_drifted = 1.0 if metric_result["dataset_drift"] else 0.0
-    share_drifted = float(metric_result["share_of_drifted_columns"])
+    # The ValueDrift metric uses a threshold of 0.1.
+    is_drifted = 1.0 if prediction_drift_distance >= 0.1 else 0.0
+    share_drifted = is_drifted
 
     if not 0.0 <= share_drifted <= 1.0:
         raise ValueError(
