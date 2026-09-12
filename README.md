@@ -86,12 +86,12 @@ graph LR
 ### Local setup
 
 ```bash
-git clone https://github.com/your-org/open-food-mlops.git
-cd open-food-mlops
+git clone https://github.com/Ibraheem-Al-hafith/open_food_mlops.git
+cd open_food_mlops
 
 # Create env & install deps
 uv sync
-# or: pip install -r requirements.txt
+# or: pip install -r pyproject.toml
 ```
 
 ### Environment variables
@@ -301,7 +301,7 @@ MIT — see [LICENSE](LICENSE).
 
 ## 📬 Contact
 
-Maintainer: **Your Name** · [email@example.com](mailto:email@example.com)
+Maintainer: **Ibrahim Alhafiz** · [ibraheem.d.alhafiz@gmail.com](ibraheem.d.alhafiz@gmail.com)
 
 ---
 
