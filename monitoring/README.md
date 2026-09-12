@@ -1,50 +1,45 @@
-# Open Food MLOps - Observability Dashboard Guide
+# 📊 Monitoring
 
-This document explains how to import, read, and use the Unified Grafana Dashboard to monitor the operational and machine learning health of the Open Food Facts NOVA classification system.
+> Evidently-based drift detection and Grafana dashboard assets.
 
-## 1. How to Import the Dashboard
+## 🎯 Purpose
 
-1. Ensure your Docker containers are running (`docker compose up -d`).
-2. Open Grafana in your browser: `http://localhost:3000` (Default: `admin`/`admin`).
-3. Verify your **Prometheus** data source is configured (`http://prometheus:9090`).
-4. In the left menu, hover over **Dashboards** (four squares) and click **Import**.
-5. Paste the JSON configuration into the "Import via panel json" text box and click **Load**.
-6. Select your Prometheus data source from the dropdown and click **Import**.
+Detect feature drift and data-quality issues in production by comparing
+live predictions against a frozen reference dataset. Metrics are pushed
+to Prometheus Pushgateway and visualized in Grafana.
 
----
+## 🧩 Structure
 
-## 2. How to Read the Dashboard (The 4 Zones)
+```
+monitoring/
+├── evidently_report.py        # Feature drift report generator
+├── dashboard.json             # Grafana dashboard definition
+├── DASHBOARD_GUIDE.md         # 📘 How to import & read the dashboard
+└── README.md
+```
 
-The dashboard is divided into four distinct monitoring zones, answering different questions about your system.
+## 🔌 Contract
 
-### Zone 1: ML Health & Degradation (Top Left)
-* **🚨 Model Degradation Ratio:** A gauge showing the current Production Macro-F1 divided by the Baseline Training Macro-F1. 
-  * *Green:* > 85% (Healthy)
-  * *Red:* < 85% (Alert: Model is degrading)
-* **🎯 Production Macro-F1:** The exact calculated Macro-F1 score of the model against delayed ground-truth labels.
+- **Inputs**: reference Parquet + current predictions (SQLite or Parquet)
+- **Outputs**:
+  - HTML report → `data/monitoring/reports/data_drift_<date>.html`
+  - Prometheus metrics → `evidently_dataset_drift`, `evidently_share_of_drifted_columns`
+- **Pushgateway job**: `batch_evidently_feature_drift`
 
-### Zone 2: Data Health & Drift (Top Right)
-* **📊 Feature Drift Share:** The percentage of input features (e.g., `fat_100g`, `sodium_100g`) that have statistically drifted from the training baseline.
-* **⚠️ Dataset Drift Flag:** A binary indicator (STABLE / DRIFT DETECTED) provided by Evidently's `DatasetDriftMetric`.
+## 🧪 Usage
 
-### Zone 3: Operational Health (Bottom Left)
-* **📈 API Request Rate (RPS):** How much traffic the FastAPI server is handling.
-* **❌ API Error Rate (5xx):** The percentage of requests resulting in internal server errors. Spikes here usually indicate code/schema bugs, not ML issues.
+```bash
+python monitoring/evidently_report.py
+```
 
-### Zone 4: Inference Performance (Bottom Right)
-* **⏱️ P95 API Latency:** The time it takes for the model to return a prediction. Spikes here indicate infrastructure issues (memory leaks, MLflow timeouts).
-* **📦 Prediction Volume:** The raw count of predictions being generated over time.
+## 🚧 What Does NOT Belong Here
 
----
+- Prediction drift → `pipelines/prediction_drift.py`
+- Performance evaluation → `pipelines/evaluate_performance.py`
+- Serving metrics → `serving/metrics.py`
 
-## 3. The Debugging Mental Model
+## 🔗 Related
 
-When an issue occurs in production, use this decision tree to diagnose the root cause:
-
-| Symptom | Dashboard Check | Diagnosis | Action Required |
-| :--- | :--- | :--- | :--- |
-| **"Predictions are slow"** | P95 Latency spikes, Request Rate is flat. | **Infrastructure Issue** | Check server memory, CPU, or MLflow connection timeouts. |
-| **"API is failing"** | Error Rate (5xx) spikes. | **Code/Schema Bug** | Check FastAPI logs. A client likely sent a payload missing a required feature. |
-| **"Model is making wrong predictions"** | Macro-F1 drops 🔴 + Feature Drift is HIGH 🔴 | **Covariate Shift** | The real world changed. Users are eating new foods the model never saw in training. **Retrain the model.** |
-| **"Model is making wrong predictions"** | Macro-F1 drops 🔴 + Feature Drift is LOW 🟢 | **Concept Drift** | The inputs look normal, but the relationship to NOVA groups changed (or ground-truth labeling is broken). **Investigate data pipeline.** |
-| **"Everything looks fine"** | Macro-F1 is STABLE 🟢 + Feature Drift is HIGH 🔴 | **Benign Drift** | The input data changed, but the model is robust enough to handle it. **Monitor closely.** |
+- 📘 [Dashboard Guide](./DASHBOARD_GUIDE.md) — import + debugging mental model
+- [Prometheus config](../docker/prometheus.yml)
+- [Grafana dashboard](./dashboard.json)

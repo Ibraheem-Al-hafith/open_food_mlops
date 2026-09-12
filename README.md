@@ -1,234 +1,308 @@
-<h1 align="center">🥗 open_food_mlops</h1>
+# 🍎 Open Food MLOps Platform
 
-<p align="center">
-  <strong>An End-to-End MLOps Pipeline for Continuous Open Food Products Analytics & Classical Machine Learning</strong>
-</p>
+> End-to-end MLOps pipeline for predicting NOVA food processing groups from nutritional data — from ingestion to production serving, monitoring, and drift detection.
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Status-Under_Active_Development-orange?style=for-the-badge&logo=gitbook&logoColor=white" alt="Status" />
-  <img src="https://img.shields.io/badge/Data_Source-Open_Food_Facts-green?style=for-the-badge&logo=openfoodfacts&logoColor=white" alt="Data Source" />
-  <img src="https://img.shields.io/badge/Architecture-Classical_MLOps-blue?style=for-the-badge&logo=python&logoColor=white" alt="Architecture" />
-  <img src="https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge" alt="License" />
-</p>
-
-<p align="center">
-  <a href="#-project-motivation--rationale">Motivation</a> •
-  <a href="#-mlops-architecture--stack">Architecture & Stack</a> •
-  <a href="#-repository-structure">Repository Structure</a> •
-  <a href="#-project-roadmap">Roadmap</a> •
-  <a href="#-getting-started">Getting Started</a>
-</p>
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![MLflow](https://img.shields.io/badge/MLflow-tracking-blue)](https://mlflow.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-serving-009688)](https://fastapi.tiangolo.com/)
+[![Prefect](https://img.shields.io/badge/Prefect-orchestration-4B4BFF)](https://www.prefect.io/)
+[![Prometheus](https://img.shields.io/badge/Prometheus-metrics-E6522C)](https://prometheus.io/)
+[![Grafana](https://img.shields.io/badge/Grafana-dashboards-F46800)](https://grafana.com/)
 
 ---
 
-## 🎯 Project Motivation & Rationale
+## 🎯 Overview
 
-`open_food_mlops` is a production-grade MLOps framework designed to continuously process, validate, model, and monitor the massive **Open Food Products** dataset. 
+**Open Food MLOps** is a production-grade machine learning platform that classifies food products into **NOVA groups (1–4)** based on their nutritional composition. It covers the full MLOps lifecycle:
 
-### Why Open Food Products Data?
-* **Massive Scale & High Volume:** Contains over a million products globally with complex tabular schemas, missing values, and high dimensionality.
-* **Frequently Updated Stream:** Data is constantly updated by a global contributor base, presenting real-world data drift and schema evolution challenges.
-* **Classical ML Friendly:** Perfectly suited for classical tree-based models (XGBoost, LightGBM, CatBoost) and statistical preprocessing pipelines.
+- 📥 **Data ingestion** from Open Food Facts
+- 🧪 **Feature engineering** with a composable transformer pipeline
+- 🤖 **Multi-model training** (Decision Tree, Random Forest, Logistic Regression, XGBoost, LightGBM)
+- 🔍 **Hyperparameter tuning** via Optuna
+- 🏆 **Champion selection** with quality gates
+- 📦 **Model registry & aliasing** through MLflow
+- 🚀 **Real-time serving** with FastAPI
+- 📊 **Monitoring** with Prometheus + Grafana
+- 🌊 **Drift detection** with Evidently
+- 🔁 **Batch inference & performance evaluation** pipelines
+- ⏰ **Prefect orchestration** for scheduled monitoring
 
-### Primary ML Objective
-The core objective is to automate quality scoring (e.g., predicting Nutri-Score/Eco-Score grades, ingredient category classification, or automated anomaly detection in nutritional reporting) through automated retraining, validation, and serving pipelines.
+The platform is **containerized**, **reproducible**, and ready to deploy on a VPS.
 
 ---
 
-## 🏗️ MLOps Architecture & Stack
+## 📊 Results
 
-This project implements a complete, production-grade MLOps stack tailored specifically for classical tabular machine learning systems.
+Champion model is selected dynamically based on `macro_f1`. Quality gates enforce minimum thresholds before promotion.
+
+| Metric | Gate | Notes |
+|--------|------|-------|
+| Accuracy | ≥ 0.50 | Minimum acceptable |
+| Macro F1 | ≥ 0.45 | Primary selection metric |
+
+> 📈 Live metrics are available in Grafana once deployed (see [Monitoring](#-monitoring)).
+
+---
+
+## 🏗️ Architecture
 
 ```mermaid
-flowchart TD
-    A[Open Food Products Data Dump] -->|Ingestion & Invalidation| B[Data Versioning: DVC]
-    B -->|Schema & Quality Rules| C[Validation: Great Expectations / Evidently]
-    C -->|Feature Engineering| D[Pipeline Orchestration: Prefect / Airflow]
-    D -->|Model Training & Tuning| E[Experiment Tracking: MLflow]
-    E -->|Artifact Registration| F[Model Registry: MLflow]
-    F -->|Automated CI/CD Test| G[GitHub Actions & Docker]
-    G -->|API Serving| H[Inference API: FastAPI]
-    H -->|Metrics & Drift Monitoring| I[Monitoring: Prometheus & Grafana]
-
+graph LR
+    A[Open Food Facts] --> B[Data Ingestion]
+    B --> C[Feature Pipeline]
+    C --> D[Model Training + Tuning]
+    D --> E{Quality Gates}
+    E -->|Pass| F[MLflow Registry]
+    E -->|Fail| G[Rejected]
+    F --> H[FastAPI Serving]
+    H --> I[Prediction Store SQLite]
+    I --> J[Evidently Drift Reports]
+    J --> K[Prometheus Pushgateway]
+    K --> L[Grafana Dashboards]
 ```
 
-### Tooling Breakdown
+### Service topology (docker-compose)
 
-| MLOps Layer | Selected Technology | Purpose & Usage |
-| --- | --- | --- |
-| **Language & Core Engine** | `Python 3.10+` `Scikit-Learn` `XGBoost` | Core data handling, feature engineering, and model estimation. |
-| **Data Versioning** | `DVC (Data Version Control)` | Versioning large dataset snapshots and tracking data lineage. |
-| **Pipeline Orchestration** | `Prefect` / `Airflow` | Automating continuous data ingestion, preprocessing, and training DAGs. |
-| **Experimentation & Registry** | `MLflow` | Tracking parameters, metrics, artifacts, and staging model versions. |
-| **Data Quality & Validation** | `Great Expectations` / `Evidently` | Catching data drift, missing value spikes, and schema violations. |
-| **Packaging & Containerization** | `Docker` | Enforcing environment consistency across training and deployment. |
-| **Inference & Serving** | `FastAPI` | Exposing low-latency REST endpoints for real-time model inference. |
-| **CI/CD & Automation** | `GitHub Actions` | Automated testing, linting, docker builds, and pipeline verification. |
-| **Monitoring & Drift** | `Prometheus` + `Grafana` | Monitoring inference request latencies, prediction distributions, and drift. |
+| Service | Internal | External | Purpose |
+|---------|----------|----------|---------|
+| FastAPI | 8000 | 1601 | Model inference API |
+| MLflow | 5000 | 1602 | Tracking + registry |
+| Prometheus | 9090 | 1603 | Metrics scraping |
+| Pushgateway | 9091 | 1604 | Batch metrics |
+| Grafana | 3000 | 1605 | Dashboards |
+| Nginx | 80 | 1606 | Reverse proxy |
 
 ---
 
-## 📂 Repository Structure
-
-```text
-open_food_mlops/
-├── .github/
-│   └── workflows/
-│       ├── ci.yml                 # Code quality, unit testing & artifact checks
-│       └── cd.yml                 # Deployment execution to VPS
-│
-├── docker/
-│   ├──Dockerfile.api             # Container definition for FastAPI serving
-│   ├── Dockerfile.mlflow          # Container definition for MLflow server
-│   ├── Dockerfile.pipeline        # Container definition for Prefect tasks/flows
-│   ├── nginx.conf                 # NGINX reverse proxy configuration
-│   └── mlflow/
-│       └── entrypoint.sh
-├── config/
-│   ├── config.yaml                # Main operational parameters
-│   └── logging.yaml               # Structured logging definitions
-│
-├── data/                         # DVC tracked directory
-│   ├── raw/
-│   ├── processed/
-│   ├── features/
-│   └── predictions/
-│
-├── models/                        # Local registry artifacts cache
-│
-├── notebooks/
-│   └── 01_exploratory_poc.ipynb
-│
-├── pipelines/                    # Prefect Workflows
-│   ├── ingestion_flow.py
-│   ├── training_flow.py
-│   ├── batch_inference_flow.py
-│   └── monitoring_flow.py
-│
-├── src/
-│   └── open_food_mlops/
-│       ├── __init__.py
-│       ├── config/
-│       │   ├── schema.py          # Pydantic data validation schemas
-│       │   └── settings.py        # Environment variables & paths
-│       │
-│       ├── data/                  # Data retrieval (Open Food Facts API/Dumps)
-│       │   ├── ingestion.py
-│       │   ├── validation.py
-│       │   ├── cleaning.py
-│       │   └── splitting.py
-│       │
-│       ├── features/             # Text & tabular feature transformation
-│       │   ├── text.py
-│       │   ├── nutrition.py
-│       │   ├── ingredients.py
-│       │   └── builder.py
-│       │
-│       ├── models/
-│       │   ├── trainer.py
-│       │   ├── predictor.py
-│       │   ├── evaluator.py
-│       │   └── calibration.py
-│       │
-│       ├── inference/
-│       │   ├── service.py
-│       │   └── decision.py
-│       │
-│       ├── infrastructure/
-│       │   ├── off_client.py
-│       │   ├── mlflow_client.py
-│       │   ├── storage.py
-│       │   └── repositories.py
-│       │
-│       └── observability/
-│           ├── logging.py
-│           └── metrics.py
-│
-├── serving/                       # Real-Time Inference Application
-│   ├── app.py                     # FastAPI entrypoint
-│   └── schemas.py                 # Request/Response DTOs
-│
-├── tests/
-│   ├── unit/                      # Fast domain component test suite
-│   ├── integration/               # Pipeline and storage tests
-│   └── end_to_end/                # API contract tests
-│
-├── docker-compose.yml             # Local & VPS orchestration manifest
-├── dvc.yaml                       # Data pipeline stage definitions
-├── dvc.lock                       # DVC state tracking file
-├── pyproject.toml                 # Dependencies (uv managed)
-├── README.md
-└── .env.example
-```
-
----
-
-## 🚦 Project Roadmap & Development Phase
-
-This project is under **active, incremental development**. Progress is tracked across the following milestones:
-
-* [x] **Phase 1: Project Setup & Framing**
-* [x] Define domain problem and MLOps tooling architecture.
-* [x] Establish repository design pattern and virtual environments.
-
-
-* [ ] **Phase 2: Data Pipeline & Ingestion**
-* [ ] Configure DVC tracking for Open Food Products datasets.
-* [ ] Implement data ingestion scripts and initial Exploratory Data Analysis (EDA).
-* [ ] Set up baseline schema validation checks using Great Expectations.
-
-
-* [ ] **Phase 3: Model Engineering & Experimentation**
-* [ ] Build baseline Scikit-Learn / XGBoost tabular pipelines.
-* [ ] Integrate MLflow for hyperparameter logging and artifact tracking.
-
-
-* [ ] **Phase 4: Orchestration & Automation**
-* [ ] Construct automated DAGs using Prefect / Airflow.
-* [ ] Implement GitHub Actions for automated unit testing (`pytest`) and linting.
-
-
-* [ ] **Phase 5: Serving & Monitoring**
-* [ ] Build containerized FastAPI endpoint.
-* [ ] Implement data drift monitoring triggers via Evidently AI.
-
-
-
----
-
-## ⚡ Getting Started
+## 📦 Installation
 
 ### Prerequisites
 
-* Python 3.10+
-* Git & DVC
-* Docker (optional, for containerized execution)
+- Python **3.11+**
+- Docker & Docker Compose
+- `uv` (recommended) or `pip`
 
-### 1. Clone & Set Up Environment
+### Local setup
 
 ```bash
-# Clone the repository
-git clone https://github.com/Ibraheem-Al-hafith/open_food_mlops.git
-cd open_food_mlops
+git clone https://github.com/your-org/open-food-mlops.git
+cd open-food-mlops
 
-# Create virtual environment
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-# Install dependencies
+# Create env & install deps
 uv sync
-
+# or: pip install -r requirements.txt
 ```
 
-### 2. Initialize Data Version Control (DVC)
+### Environment variables
+
+Create a `.env` at the project root:
+
+```env
+APP_ENV=development
+MLFLOW_TRACKING_URI=http://localhost:1602
+PUSHGATEWAY_URL=http://localhost:1604
+```
+
+> ⚠️ In production, `MLFLOW_TRACKING_URI` and `PUSHGATEWAY_URL` **must not** point to localhost (enforced by `settings.py`).
+
+---
+
+## 🚀 Usage
+
+### 1. Ingest data
 
 ```bash
-# Pull versioned data artifacts (if configured)
-dvc pull
+python pipelines/data_ingestion_flow.py
+```
+
+### 2. Train & select champion
+
+```bash
+python main.py train --config config/experiment.yaml
+```
+
+### 3. Serve predictions
+
+```bash
+python main.py serve --host 0.0.0.0 --port 8000
+```
+
+### 4. Batch inference
+
+```bash
+python pipelines/batch_inference_flow.py --sample-size 10000
+```
+
+### 5. Generate reference data (for monitoring)
+
+```bash
+python pipelines/create_reference_data.py
+python pipelines/create_reference_predictions.py
+```
+
+### 6. Run monitoring checks
+
+```bash
+python pipelines/monitoring_flow.py
+```
+
+### 7. Full stack via Docker
+
+```bash
+docker compose up --build
+```
+
+Then visit:
+
+- API docs → http://localhost:1601/docs
+- MLflow → http://localhost:1606/mlflow/
+- Grafana → http://localhost:1606/grafana/
+- Prometheus → http://localhost:1603
+
+---
+
+## 📡 API Reference
+
+### `POST /v1/predict`
+
+```bash
+curl -X POST http://localhost:1601/v1/predict \
+  -H "Content-Type: application/json" \
+  -d '{
+    "product_code": "3017620422003",
+    "added-sugars_100g": 5.0,
+    "fat_100g": 30.0,
+    "proteins_100g": 6.0,
+    "fruits-vegetables-legumes_100g": 0.0,
+    "sodium_100g": 0.2,
+    "salt_100g": 0.5,
+    "energy-kcal_100g": 550.0,
+    "carbohydrates_100g": 57.0,
+    "water_100g": 2.0
+  }'
+```
+
+**Response**
+
+```json
+{
+  "nova_group": 4,
+  "probability": 0.9231
+}
+```
+
+### `GET /health`
+
+```json
+{ "status": "healthy", "model_loaded": true, "model_version": "production" }
+```
+
+### `GET /metrics`
+
+Prometheus exposition format.
+
+---
+
+## 📁 Project Structure
 
 ```
+.
+├── config/                 # YAML experiment & logging configs
+├── docker/                 # Dockerfiles, nginx, prometheus configs
+├── docker-compose.yml      # Full stack orchestration
+├── main.py                 # CLI entrypoint (train / serve)
+├── monitoring/             # Evidently drift reports
+├── notebooks/              # PoC & maintenance notebooks
+├── pipelines/              # Prefect/CLI pipelines
+│   ├── data_ingestion_flow.py
+│   ├── batch_inference_flow.py
+│   ├── evaluate_performance.py
+│   ├── monitoring_flow.py
+│   ├── prediction_drift.py
+│   └── training_flow.py
+├── serving/                # FastAPI app, metrics, prediction store
+├── src/open_food_mlops/    # Core library
+│   ├── config/             # Settings & schemas
+│   ├── data/               # Ingestor & splitting
+│   ├── evaluation/         # Evaluator
+│   ├── experiments/        # Orchestrator & selection
+│   ├── features/           # Transformer pipeline
+│   ├── models/             # Base, registry, implementations, tuning
+│   ├── tracking/           # MLflow wrapper
+│   └── utils/              # Logging
+└── tests/                  # Unit + integration tests
+```
+
+---
+
+## 🧪 Testing
+
+```bash
+pytest tests/unit -v
+pytest tests/integration -v
+```
+
+---
+
+## 📊 Monitoring
+
+- **Feature drift** → `monitoring/evidently_report.py` → `evidently_dataset_drift`
+- **Prediction drift** → `pipelines/prediction_drift.py` → `evidently_prediction_drift`
+- **Performance degradation** → `pipelines/evaluate_performance.py` → `model_degradation_ratio`
+- **Serving metrics** → `serving/metrics.py` → latency, throughput, prediction distribution
+
+All metrics are pushed to **Pushgateway** and scraped by **Prometheus**, visualized in **Grafana** (`monitoring/dashboard.json`).
+
+> 🔔 Alert threshold: `model_degradation_ratio < 0.85` triggers a critical log.
+
+---
+
+## 🗺️ Roadmap
+
+- [x] Data ingestion & processing
+- [x] Multi-model training with Optuna tuning
+- [x] MLflow registry with `production` alias
+- [x] FastAPI serving + Prometheus metrics
+- [x] Evidently drift detection
+- [x] Prefect monitoring flow
+- [ ] **Prefect scheduled deployments on VPS**
+- [ ] **CI/CD via GitHub Actions**
+- [ ] **Enhanced NOVA score prediction pipeline** (text + ingredients features)
+- [ ] Model card + Hugging Face weights publication
+- [ ] Colab demo notebook
+
+---
+
+## ⚠️ Limitations
+
+- NOVA labels are **coarse**; class imbalance exists across groups.
+- Features rely solely on **nutritional values** — no ingredient text yet.
+- Predictions should **not** be used as medical or dietary advice.
+- Production monitoring requires **delayed ground truth** for performance evaluation.
+- SQLite prediction store is suitable for **single-node** deployments.
+
+---
+
+## 🤝 Contributing
+
+1. Fork the repo
+2. Create a feature branch
+3. Run `pytest tests/ -v`
+4. Open a Pull Request
 
 ---
 
 ## 📜 License
 
-Distributed under the MIT License. See `LICENSE` for more information.
+MIT — see [LICENSE](LICENSE).
+
+---
+
+## 📬 Contact
+
+Maintainer: **Your Name** · [email@example.com](mailto:email@example.com)
+
+---
+
+> 🍕 *Because knowing what's in your food shouldn't require a PhD.*

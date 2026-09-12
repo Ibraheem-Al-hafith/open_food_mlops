@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
+from .settings import settings
 
 
 class DataConfig(BaseModel):
@@ -69,7 +70,7 @@ class TrackingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     backend: str = "mlflow"
-    experiment_name: str = "open-food-mlops-v2"
+    experiment_name: str = str(settings.mlflow_experiment_name) or "open_food_mlops_experiment"
 
 
 class ExperimentPlan(BaseModel):
