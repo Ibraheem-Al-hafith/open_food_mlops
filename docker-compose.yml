@@ -38,8 +38,10 @@ services:
     ports:
       - "1050:5000"
     volumes:
-      - ./mlflow/mlflow.db:/mlflow/mlflow.db
-      - ./mlflow/mlruns:/mlflow/mlruns
+      # 1. Mount the parent directory instead of the specific file
+      - ./mlflow:/mlflow
+    # 2. Add an entrypoint to auto-fix the directory-to-file mismatch
+    entrypoint: ["/bin/sh", "-c", "if [ -d /mlflow/mlflow.db ]; then rm -rf /mlflow/mlflow.db; fi; touch /mlflow/mlflow.db; mkdir -p /mlflow/mlruns; exec \"$@\"", "--"]
     healthcheck:
       test:
         [
