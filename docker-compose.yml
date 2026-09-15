@@ -5,7 +5,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.fastapi
     ports:
-      - "1601:8000"
+      - "1051:8000"
     env_file:
       - .env
     environment:
@@ -36,7 +36,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.mlflow
     ports:
-      - "1602:5000"
+      - "1050:5000"
     volumes:
       - ./mlflow/mlflow.db:/mlflow/mlflow.db
       - ./mlflow/mlruns:/mlflow/mlruns
@@ -77,7 +77,7 @@ services:
     image: grafana/grafana:latest
     container_name: grafana
     ports:
-      - "1605:3000"
+      - "1053:3000"
     volumes:
       - grafana_data:/var/lib/grafana
     depends_on:
