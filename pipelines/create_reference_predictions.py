@@ -1,13 +1,16 @@
+"""Generate model predictions for the monitoring reference dataset."""
+
+from __future__ import annotations
+
 import numpy as np
 import pandas as pd
 
+from open_food_mlops.config.features import FEATURE_COLUMNS
 from open_food_mlops.config.settings import settings
 from pipelines.batch_inference_flow import (
     extract_batch_predictions,
     load_champion_model,
 )
-from open_food_mlops.config.features import FEATURE_COLUMNS
-
 
 
 REFERENCE_PATH = settings.reference_data_path
@@ -17,7 +20,7 @@ SAMPLE_SIZE = 10_000
 RANDOM_STATE = 42
 
 
-def main() -> None:
+def generate_reference_predictions() -> None:
     print("Loading reference dataset...")
 
     reference_df = pd.read_parquet(REFERENCE_PATH)
@@ -35,8 +38,6 @@ def main() -> None:
             f"Missing required features: {missing_features}"
         )
 
-    # Use a representative sample instead of running inference
-    # over the entire 1.13M-row reference population.
     if len(reference_df) > SAMPLE_SIZE:
         reference_df = reference_df.sample(
             n=SAMPLE_SIZE,
@@ -55,7 +56,6 @@ def main() -> None:
     )
 
     print(f"Champion model: {run_id}")
-
     print("Running inference...")
 
     raw_predictions, probabilities = extract_batch_predictions(
@@ -63,8 +63,6 @@ def main() -> None:
         feature_df,
     )
 
-    # Existing project convention:
-    # raw classes 0-3 -> NOVA groups 1-4
     predictions = np.where(
         raw_predictions < 4,
         raw_predictions + 1,
@@ -102,21 +100,9 @@ def main() -> None:
         .sort_index()
     )
 
-    print()
-    print("Prediction percentages:")
-    print(
-        (
-            output_df["prediction"]
-            .value_counts(normalize=True)
-            .sort_index()
-            .mul(100)
-            .round(2)
-        )
-    )
 
-    print()
-    print("Model versions:")
-    print(output_df["model_version"].value_counts())
+def main() -> None:
+    generate_reference_predictions()
 
 
 if __name__ == "__main__":

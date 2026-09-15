@@ -8,6 +8,7 @@ from typing import Dict, List
 
 import pandas as pd
 import requests
+import hashlib
 
 from open_food_mlops.config.features import FEATURE_COLUMNS, TARGET_COLUMN
 from open_food_mlops.config.settings import settings
@@ -59,6 +60,11 @@ class DataConfig:
     def processed_success_flag(self) -> Path:
         return self.processed_dir / ".success"
 
+    @property
+    def schema_signature(self) -> str:
+        """Stable signature for the current feature/target schema."""
+        schema = "\n".join([*self.features, self.target])
+        return hashlib.sha256(schema.encode("utf-8")).hexdigest()
 
 class BaseDataIngestor(ABC):
     """Abstract Base Class defining the interface for data ingestion pipelines."""
@@ -124,8 +130,18 @@ class OpenFoodFactsDataIngestor(BaseDataIngestor):
             self.config.processed_success_flag.exists()
             and self.config.processed_file_path.exists()
         ):
-            logger.info("Processed data already exists. Skipping processing.")
-            return
+            stored_signature = self.config.processed_success_flag.read_text().strip()
+
+            if stored_signature == self.config.schema_signature:
+                logger.info(
+                    "Processed data already exists with current schema. "
+                    "Skipping processing."
+                )
+                return
+
+            logger.info(
+                "Processed data schema is outdated. Reprocessing dataset."
+            )
 
         if not self.config.raw_file_path.exists():
             raise FileNotFoundError(
@@ -184,7 +200,9 @@ class OpenFoodFactsDataIngestor(BaseDataIngestor):
                 self.config.processed_file_path, index=False, engine="auto"
             )
 
-            self.config.processed_success_flag.touch()
+            self.config.processed_success_flag.write_text(
+                self.config.schema_signature
+            )
             logger.info(
                 "Successfully saved processed dataset (%d rows) to %s",
                 len(full_df),
