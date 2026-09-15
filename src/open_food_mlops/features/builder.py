@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING
 
 from .base import FeaturePipeline
 from .identity import IdentityTransformer
+from .column_selector import ColumnSelectorTransformer
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,23 @@ def get_feature_pipeline() -> FeaturePipeline:
     transformers.extend(
         [
             IdentityTransformer(),
+            ColumnSelectorTransformer([    
+                    "added-sugars_100g",
+                    "fruits-vegetables-legumes_100g",
+                    "energy_100g",
+                    "energy-kcal_100g",
+                    "proteins_100g",
+                    "carbohydrates_100g",
+                    "sugars_100g",
+                    "fat_100g",
+                    "saturated-fat_100g",
+                    "fiber_100g",
+                    "sodium_100g",
+                    "salt_100g",
+                    "water_100g",
+                    "additives_n",
+                ]
+                ,missing_columns="warning")
         ]
     )
 

@@ -6,25 +6,9 @@ from typing import Final
 
 TARGET_COLUMN: Final[str] = "nova_group"
 
-RAW_FEATURES: Final[list[str]] = [
-    "added-sugars_100g",
-    "fat_100g",
-    "proteins_100g",
-    "fruits-vegetables-legumes_100g",
-    "sodium_100g",
-    "salt_100g",
-    "energy-kcal_100g",
-    "carbohydrates_100g",
-    "water_100g",
-]
-
-FEATURE_COLUMNS: Final[list[str]] = [f for f in RAW_FEATURES if f != TARGET_COLUMN]
-
-#===============================================================
-#               For future usage
-#===============================================================
-
 CORE_NUTRITIONAL_VALUES = [
+    "added-sugars_100g",
+    "fruits-vegetables-legumes_100g",
     "energy_100g",
     "energy-kcal_100g",
     "proteins_100g",
@@ -35,6 +19,7 @@ CORE_NUTRITIONAL_VALUES = [
     "fiber_100g",
     "sodium_100g",
     "salt_100g",
+    "water_100g",
 ]
 
 ADDITIVES = [
@@ -53,6 +38,7 @@ CATEGORY_AND_DESCRIPTIVE_TAGS = [
     "pnns_groups_2",
 ]
 
-TARGET = [
-    "nova_group",
-]
+
+RAW_FEATURES: Final[list[str]] = CORE_NUTRITIONAL_VALUES + ADDITIVES + INGREDIENT_INFORMATION + CATEGORY_AND_DESCRIPTIVE_TAGS
+
+FEATURE_COLUMNS: Final[list[str]] = [f for f in RAW_FEATURES if f != TARGET_COLUMN]

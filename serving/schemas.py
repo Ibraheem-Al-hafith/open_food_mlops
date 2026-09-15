@@ -13,8 +13,12 @@ class NovaPredictRequest(BaseModel):
     product_code: Optional[str] = Field(
         None, alias="product_code", description="Unique product barcode identifier for operational tracking"
     )
+    energy_100g: float = Field(..., ge=0.0)
     added_sugars_100g: float = Field(..., alias="added-sugars_100g", ge=0.0)
+    saturated_fat_100g: float = Field(..., alias="saturated-fat_100g", ge=0.0)
     fat_100g: float = Field(..., ge=0.0)
+    fiber_100g: float = Field(..., ge=0.0)
+    sugars_100g: float = Field(..., ge=0.0)
     proteins_100g: float = Field(..., ge=0.0)
     fruits_vegetables_legumes_100g: float = Field(
         ..., alias="fruits-vegetables-legumes_100g", ge=0.0, le=100.0
@@ -24,6 +28,7 @@ class NovaPredictRequest(BaseModel):
     energy_kcal_100g: float = Field(..., alias="energy-kcal_100g", ge=0.0)
     carbohydrates_100g: float = Field(..., ge=0.0)
     water_100g: float = Field(..., ge=0.0)
+    additives_n: float = Field(..., ge=0.0)
 
     @field_validator("*", mode="before")
     @classmethod
