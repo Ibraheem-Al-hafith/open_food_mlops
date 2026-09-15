@@ -41,7 +41,7 @@ services:
       # 1. Mount the parent directory instead of the specific file
       - ./mlflow:/mlflow
     # 2. Add an entrypoint to auto-fix the directory-to-file mismatch
-    entrypoint: ["/bin/sh", "-c", "if [ -d /mlflow/mlflow.db ]; then rm -rf /mlflow/mlflow.db; fi; touch /mlflow/mlflow.db; mkdir -p /mlflow/mlruns; exec \"$@\"", "--"]
+    # entrypoint: ["/bin/sh", "-c", "if [ -d /mlflow/mlflow.db ]; then rm -rf /mlflow/mlflow.db; fi; touch /mlflow/mlflow.db; mkdir -p /mlflow/mlruns; exec \"$@\"", "--"]
     healthcheck:
       test:
         [
