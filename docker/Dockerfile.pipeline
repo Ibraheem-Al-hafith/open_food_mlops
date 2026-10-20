@@ -1,5 +1,8 @@
 FROM python:3.12-slim
 
+# Install uv from the official Astral image
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
 WORKDIR /app
 
 RUN apt-get update \
@@ -7,13 +10,18 @@ RUN apt-get update \
         libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir uv
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy
 
+# Copy project definition and lock file
 COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
 
-RUN uv sync --frozen --no-dev
+# Sync pipeline dependencies with persistent uv cache mount
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev
 
+# Copy pipeline scripts, monitoring configs, and entrypoints
 COPY pipelines ./pipelines
 COPY monitoring ./monitoring
 COPY config ./config

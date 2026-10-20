@@ -1,5 +1,8 @@
 FROM python:3.12-slim
 
+# Install uv from the official Astral image
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
 WORKDIR /app
 
 RUN apt-get update \
@@ -7,15 +10,27 @@ RUN apt-get update \
         libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml README.md ./
+# Enable bytecode compilation and copy link mode for optimal uv performance
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy
+
+# Copy dependency configuration files first to leverage Docker layer caching
+COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
 
-RUN pip install --no-cache-dir .
+# Install dependencies using uv with host-level caching for limited internet access
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev
 
+# Copy application code after dependencies are installed
 COPY serving ./serving
 COPY config ./config
 COPY main.py .
 
+# Configure environment paths
+ENV PATH="/app/.venv/bin:$PATH"
+ENV PYTHONPATH="/app/src:/app"
+
 EXPOSE 8000
 
-CMD ["uvicorn", "serving.app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "serving.app:app", "--host", "0.0.0.0", "--port", "8000", "--root-path", "/api"]
