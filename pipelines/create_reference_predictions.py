@@ -12,7 +12,6 @@ from pipelines.batch_inference_flow import (
     load_champion_model,
 )
 
-
 REFERENCE_PATH = settings.reference_data_path
 OUTPUT_PATH = settings.reference_predictions_path
 

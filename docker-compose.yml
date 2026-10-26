@@ -102,7 +102,8 @@ services:
         condition: service_healthy
       grafana:
         condition: service_started
-
+      ui:
+        condition: service_healthy
   pipeline:
     build:
       context: .
@@ -188,6 +189,20 @@ services:
         "--limit",
         "1"
       ]
+    restart: unless-stopped
+  
+  ui:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.ui
+    environment:
+      UI_API_URL: http://fastapi:8000
+      UI_ROOT_PATH: /ui
+      UI_AUTH_USERNAME: ${UI_AUTH_USERNAME:-}
+      UI_AUTH_PASSWORD: ${UI_AUTH_PASSWORD:-}
+    depends_on:
+      fastapi:
+        condition: service_healthy
     restart: unless-stopped
 volumes:
   grafana_data:

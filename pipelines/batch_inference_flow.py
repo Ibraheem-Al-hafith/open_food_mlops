@@ -14,6 +14,7 @@ import pandas as pd
 from open_food_mlops.config.features import FEATURE_COLUMNS
 from open_food_mlops.config.settings import settings
 from open_food_mlops.utils.logger import setup_logging
+from serving.inference import predict_with_confidence, to_nova_groups, validate_probabilities
 from serving.prediction_store import PredictionStore
 
 logger = logging.getLogger(__name__)
@@ -58,53 +59,12 @@ def load_champion_model(
 def extract_batch_predictions(
     model: Any, input_df: pd.DataFrame
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """Execute batch inference extracting predictions using estimator class definitions."""
-    candidate_estimators = []
+    """Execute batch inference (kept for backward compatibility).
 
-    if hasattr(model, "unwrap_python_model"):
-        try:
-            unwrapped = model.unwrap_python_model()
-            if unwrapped is not None:
-                candidate_estimators.append(unwrapped)
-        except Exception:
-            pass
-
-    model_impl = getattr(model, "_model_impl", None)
-    if model_impl is not None:
-        sklearn_model = getattr(model_impl, "sklearn_model", None)
-        if sklearn_model is not None:
-            candidate_estimators.append(sklearn_model)
-        candidate_estimators.append(model_impl)
-
-    candidate_estimators.append(model)
-
-    for estimator in candidate_estimators:
-        classes = getattr(estimator, "classes_", None)
-        if hasattr(estimator, "predict_proba"):
-            try:
-                probs = estimator.predict_proba(input_df)
-                if isinstance(probs, pd.DataFrame):
-                    probs = probs.to_numpy()
-
-                best_indices = np.argmax(probs, axis=1)
-                max_probs = np.max(probs, axis=1)
-
-                if classes is not None:
-                    raw_preds = np.array([classes[idx] for idx in best_indices])
-                else:
-                    raw_preds = best_indices
-
-                return raw_preds, max_probs
-            except Exception as exc:
-                logger.debug("Failed batch predict_proba on candidate %s: %s", estimator, exc)
-                continue
-
-    preds = model.predict(input_df)
-    if isinstance(preds, (pd.DataFrame, pd.Series)):
-        preds = preds.to_numpy().flatten()
-
-    probabilities = np.ones_like(preds, dtype=float)
-    return preds, probabilities
+    Delegates to :func:`serving.inference.predict_with_confidence` so that batch,
+    reference and online predictions share one implementation.
+    """
+    return predict_with_confidence(model, input_df)
 
 
 def run_batch_inference(
@@ -148,7 +108,8 @@ def run_batch_inference(
     )
 
     raw_preds, max_probs = extract_batch_predictions(model, feature_df)
-    nova_groups = np.where(raw_preds < 4, raw_preds + 1, raw_preds)
+    nova_groups = to_nova_groups(raw_preds)
+    max_probs = validate_probabilities(max_probs)
 
     store = PredictionStore(db_path=output_store_path)
 

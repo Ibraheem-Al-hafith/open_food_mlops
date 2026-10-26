@@ -1,8 +1,12 @@
 """Pydantic schemas for the FastAPI inference service."""
 
 import math
-from typing import Optional, Any
+from typing import Any, Final, Optional
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+#: Hard upper bound of records accepted by a single batch request.
+MAX_BATCH_SIZE: Final[int] = 5000
 
 
 class NovaPredictRequest(BaseModel):
@@ -68,3 +72,50 @@ class NovaPredictResponse(BaseModel):
         if isinstance(value, (int, float)) and not math.isfinite(value):
             raise ValueError("Probability must be a finite numeric value.")
         return value
+
+
+class NovaBatchPredictRequest(BaseModel):
+    """Schema for a batch of products. Each record is validated individually."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    records: list[dict[str, Any]] = Field(
+        ...,
+        min_length=1,
+        max_length=MAX_BATCH_SIZE,
+        description="Raw feature records, validated one by one against NovaPredictRequest.",
+    )
+    persist: bool = Field(
+        False,
+        description="Store predictions in the production prediction store (feeds monitoring).",
+    )
+
+
+class BatchPrediction(BaseModel):
+    """Prediction for one successfully validated batch record."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    index: int = Field(..., ge=0, description="Position of the record in the request.")
+    product_code: Optional[str] = None
+    nova_group: int = Field(..., ge=1, le=4)
+    probability: float = Field(..., ge=0.0, le=1.0)
+
+
+class BatchRowError(BaseModel):
+    """Validation failure for one batch record."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    index: int = Field(..., ge=0, description="Position of the record in the request.")
+    detail: str
+
+
+class NovaBatchPredictResponse(BaseModel):
+    """Batch result: valid rows are predicted, invalid rows are reported."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    model_version: str
+    predictions: list[BatchPrediction]
+    errors: list[BatchRowError]
